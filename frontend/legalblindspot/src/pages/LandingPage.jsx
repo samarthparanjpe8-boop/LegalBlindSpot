@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import Badge from '../components/shared/Badge';
+import heroBg from "../assets/landing_page_pic.jpg";
 
 export default function LandingPage() {
   const observerRef = useRef(null);
@@ -35,18 +36,15 @@ export default function LandingPage() {
 
   return (
     <div className="landing-page">
-      {/* ───── Cinematic Hero Zone ───── */}
       <div className="landing-hero-wrapper">
-        {/* Background image layer — blurred & dimmed behind content */}
         <div className="hero-bg-layer" aria-hidden="true">
           <img
-            src="/assets/hero-bg.png"
+            src={heroBg}
             alt=""
             className="hero-bg-image"
             loading="eager"
           />
         </div>
-        {/* Dark overlay for text readability */}
         <div className="hero-overlay" aria-hidden="true"></div>
 
         <nav className="landing-nav">
@@ -78,15 +76,6 @@ export default function LandingPage() {
               <span className="btn-arrow">→</span>
             </Link>
           </div>
-          <div className="hero-trust-row">
-            <span className="trust-indicator">✓ Verified Advocates</span>
-            <span className="trust-indicator-sep">·</span>
-            <span className="trust-indicator">100% Free</span>
-            <span className="trust-indicator-sep">·</span>
-            <span className="trust-indicator">7 Cities</span>
-            <span className="trust-indicator-sep">·</span>
-            <span className="trust-indicator">English</span>
-          </div>
         </header>
       </div>
 
@@ -96,7 +85,7 @@ export default function LandingPage() {
           { icon: '🔍', label: 'Find Lawyers' },
           { icon: '⚡', label: 'Case Assessment' },
           { icon: '✓', label: 'Verify Advice' },
-          { icon: '📋', label: 'Document Checklist' },
+          // { icon: '📋', label: 'Document Checklist' },
           { icon: '🛡', label: 'Trust Scores' },
         ].map((f, i) => (
           <div className="strip-item" key={i}>
@@ -120,9 +109,8 @@ export default function LandingPage() {
               { icon: '🔍', title: 'Find the Right Lawyer', desc: 'Filter by city, case type, and budget. Every advocate has a verified trust score.' },
               { icon: '⚡', title: 'Know If Your Case Is Worth It', desc: 'Get an honest viability assessment before spending a rupee on legal fees.' },
               { icon: '✓', title: 'Verify Legal Advice', desc: 'Paste what your lawyer told you. We\'ll tell you if it checks out.' },
-              { icon: '📋', title: 'Know What Documents You Need', desc: 'Case-specific document checklists so you\'re prepared before the first meeting.' },
+              // { icon: '📋', title: 'Know What Documents You Need', desc: 'Case-specific document checklists so you\'re prepared before the first meeting.' },
               { icon: '🛡', title: 'Trust Scores for Every Advocate', desc: 'Transparent scoring based on verification, experience, ratings, and case history.' },
-              { icon: '🗣', title: 'Speak Your Language', desc: 'Ask in Hindi, English, or Hinglish. LegalLink understands all three.' }
             ].map((f, i) => (
               <div className="feature-card reveal-on-scroll" key={i} style={{ animationDelay: `${i * 60}ms` }}>
                 <span className="feature-icon">{f.icon}</span>
