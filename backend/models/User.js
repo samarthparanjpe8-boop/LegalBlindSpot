@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
+  name: {
+    type: String,
+  },
   email: {
     type: String,
     required: true,
@@ -21,6 +24,9 @@ const UserSchema = new mongoose.Schema({
     enum: ['client', 'lawyer'],
     required: true,
     default: 'client',
+  },
+  city: {
+    type: String,
   },
   createdAt: {
     type: Date,

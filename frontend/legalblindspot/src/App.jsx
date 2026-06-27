@@ -33,25 +33,22 @@ export default function App() {
             <Route path="/" element={<LandingPage />} />
             <Route
               path="/onboarding"
-              element={
-                session.sessionId ? (
-                  <Navigate to="/dashboard" replace />
-                ) : (
-                  <OnboardingPage createSession={createSession} />
-                )
-              }
+              element={<Navigate to="/dashboard" replace />}
             />
             <Route
               path="/dashboard"
               element={
-                <DashboardPage
-                  session={session}
-                  updateCity={updateCity}
-                  updateBudget={updateBudget}
-                  setCaseType={setCaseType}
-                  clearSession={clearSession}
-                  addToast={addToast}
-                />
+                <ProtectedRoute requiredRole="client">
+                  <DashboardPage
+                    session={session}
+                    updateCity={updateCity}
+                    updateBudget={updateBudget}
+                    setCaseType={setCaseType}
+                    clearSession={clearSession}
+                    addToast={addToast}
+                    createSession={createSession}
+                  />
+                </ProtectedRoute>
               }
             />
             <Route path="/signup" element={<SignupPage />} />

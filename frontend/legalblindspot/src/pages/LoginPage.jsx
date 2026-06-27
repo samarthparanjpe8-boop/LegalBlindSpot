@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -18,7 +20,7 @@ const LoginPage = () => {
     setError('');
     setMessage('');
     try {
-      const res = await login(email, password);
+      await login(email, password);
       // login returns payload, navigate based on role
       const token = localStorage.getItem('token');
       if (token) {
@@ -48,26 +50,51 @@ const LoginPage = () => {
       <div className="auth-card" style={{
         background: 'var(--bg-secondary)',
         padding: '40px',
-        borderRadius: '16px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
         width: '100%',
         maxWidth: '400px',
-        border: '1px solid rgba(255, 255, 255, 0.1)'
+        border: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
-        <h2 style={{ color: 'var(--text-primary)', marginBottom: '24px', textAlign: 'center', fontSize: '2rem' }}>Welcome Back</h2>
+        <Link to="/" style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          color: 'var(--text-secondary)',
+          textDecoration: 'none',
+          fontSize: '0.85rem',
+          marginBottom: '24px',
+          alignSelf: 'flex-start',
+          transition: 'color 0.2s',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em'
+        }} className="back-link">
+          <ArrowLeft size={16} /> Back to Home
+        </Link>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', marginBottom: '24px' }}>
+          <span className="logo-icon" style={{ fontSize: '1.5rem', color: 'var(--accent)' }}>⚖</span>
+          <span className="logo-text" style={{ fontSize: '1.5rem', fontWeight: '500', color: 'var(--text-primary)' }}>LegalLink</span>
+        </div>
+
+        <h2 style={{ color: 'var(--text-primary)', marginBottom: '24px', textAlign: 'center', fontSize: '2rem', fontFamily: 'var(--font-serif)' }}>Welcome Back</h2>
+        
         {message && (
-          <div style={{ color: '#4aff84', marginBottom: '16px', fontSize: '0.9rem', textAlign: 'center' }}>
+          <div style={{ color: 'var(--success)', marginBottom: '16px', fontSize: '0.9rem', textAlign: 'center' }}>
             {message}
           </div>
         )}
         {error && (
-          <div style={{ color: '#ff4a4a', marginBottom: '16px', fontSize: '0.9rem', textAlign: 'center' }}>
+          <div style={{ color: 'var(--danger)', marginBottom: '16px', fontSize: '0.9rem', textAlign: 'center' }}>
             {error}
           </div>
         )}
+        
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.9rem' }}>Email Address</label>
+            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Address</label>
             <input
               type="email"
               placeholder="name@example.com"
@@ -77,8 +104,8 @@ const LoginPage = () => {
               style={{
                 width: '100%',
                 padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border)',
                 background: 'var(--bg-primary)',
                 color: 'var(--text-primary)',
                 fontSize: '1rem',
@@ -87,40 +114,66 @@ const LoginPage = () => {
             />
           </div>
           <div>
-            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.9rem' }}>Password</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                fontSize: '1rem',
-                outline: 'none'
-              }}
-            />
+            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 40px 12px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '1rem',
+                  outline: 'none'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0
+                }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <button
             type="submit"
             disabled={loading}
             style={{
               background: 'var(--accent)',
-              color: '#000',
+              color: 'var(--text-primary)',
               padding: '14px',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
-              fontSize: '1rem',
+              fontSize: '0.9rem',
               fontWeight: '600',
               cursor: 'pointer',
               marginTop: '10px',
-              transition: 'opacity 0.2s'
+              transition: 'var(--transition)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
             }}
+            onMouseEnter={(e) => e.target.style.background = 'var(--accent-hover)'}
+            onMouseLeave={(e) => e.target.style.background = 'var(--accent)'}
           >
             {loading ? 'Logging in...' : 'Log In'}
           </button>

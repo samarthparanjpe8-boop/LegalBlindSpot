@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
       // decode token payload (simple base64 decode, no verification)
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setUser({ id: payload.sub, email: payload.email, role: payload.role, token });
+        setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, token });
       } catch (e) {
         console.error('Invalid token', e);
         localStorage.removeItem('token');
@@ -28,12 +28,12 @@ export const AuthProvider = ({ children }) => {
     const { token } = res.data;
     localStorage.setItem('token', token);
     const payload = JSON.parse(atob(token.split('.')[1]));
-    setUser({ id: payload.sub, email: payload.email, role: payload.role, token });
+    setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, token });
     return res;
   };
 
-  const signup = async (email, password, role) => {
-    const res = await axios.post('/api/auth/signup', { email, password, role });
+  const signup = async (email, password, role, name, city) => {
+    const res = await axios.post('/api/auth/signup', { email, password, role, name, city });
     return res;
   };
 

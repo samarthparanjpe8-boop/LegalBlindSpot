@@ -1,13 +1,15 @@
 import { useState } from 'react';
+import { Check, FileText, CheckCircle, Upload } from 'lucide-react';
 
 export default function DocumentChecklist({ caseType, sessionId }) {
   const [readyDocs, setReadyDocs] = useState({});
 
   if (!caseType) {
     return (
-      <div className="document-checklist-empty">
-        <h3>No case type detected yet</h3>
-        <p>Please describe your situation in the chat first to get a custom checklist.</p>
+      <div className="document-checklist-empty" style={{ textAlign: 'center', padding: '40px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
+        <FileText size={40} style={{ color: 'var(--text-secondary)', marginBottom: '16px' }} />
+        <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', marginBottom: '8px' }}>No case type detected yet</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Please describe your situation in the chat first to get a custom checklist.</p>
       </div>
     );
   }
@@ -75,40 +77,70 @@ export default function DocumentChecklist({ caseType, sessionId }) {
   };
 
   return (
-    <div className="document-checklist">
-      <h2 className="checklist-heading">Document Checklist for {caseType}</h2>
-      <div className="checklist-progress">
-        <div className="progress-text">{readyCount} of {total} documents ready</div>
-        <div className="progress-bar-container">
+    <div className="document-checklist" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <h2 className="checklist-heading" style={{ fontFamily: 'var(--font-serif)', margin: 0 }}>Document Checklist for {caseType}</h2>
+      
+      <div className="checklist-progress" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '20px', borderRadius: 'var(--radius-lg)' }}>
+        <div className="progress-text" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '8px', fontWeight: '500' }}>
+          {readyCount} of {total} documents ready
+        </div>
+        <div className="progress-bar-container" style={{ background: 'var(--bg-primary)', height: '8px', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
           <div 
             className="progress-bar-fill" 
-            style={{ width: `${(readyCount / total) * 100}%` }}
+            style={{ width: `${(readyCount / total) * 100}%`, height: '100%', background: 'var(--accent)', transition: 'var(--transition)' }}
           />
         </div>
       </div>
 
-      <div className="checklist-list">
+      <div className="checklist-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {docs.map((doc, idx) => (
           <div 
             key={idx} 
             className={`checklist-item ${readyDocs[idx] ? 'item-checked' : ''}`}
             onClick={() => handleToggle(idx)}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+              padding: '16px',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              transition: 'var(--transition)'
+            }}
           >
-            <div className="checklist-checkbox">
-              {readyDocs[idx] ? '✓' : ''}
+            <div className="checklist-checkbox" style={{
+              width: '18px',
+              height: '18px',
+              borderRadius: '3px',
+              border: '1px solid var(--border)',
+              background: readyDocs[idx] ? 'var(--accent)' : 'var(--bg-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-primary)',
+              flexShrink: 0,
+              marginTop: '2px'
+            }}>
+              {readyDocs[idx] && <Check size={12} />}
             </div>
             <div className="checklist-info">
-              <span className="checklist-name">{doc.name}</span>
-              <span className="checklist-desc">{doc.desc}</span>
+              <span className="checklist-name" style={{ display: 'block', fontSize: '0.95rem', fontWeight: '500', color: 'var(--text-primary)' }}>{doc.name}</span>
+              <span className="checklist-desc" style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{doc.desc}</span>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="checklist-info-box">
-        <p>Drop your documents into the case folder at:</p>
-        <code className="checklist-code">/legallink-cases/{sessionId || 'session'}/uploaded/</code>
-        <div className="checklist-note">The chatbot terminal detects uploads automatically.</div>
+      <div className="checklist-info-box" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px' }}>
+        <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Upload size={16} style={{ color: 'var(--accent)' }} /> Drop your documents into the case folder at:
+        </p>
+        <code className="checklist-code" style={{ display: 'block', background: 'var(--bg-primary)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.9rem', color: 'var(--text-primary)', border: '1px solid var(--border)', overflowX: 'auto', marginBottom: '12px' }}>
+          /legallink-cases/{sessionId || 'session'}/uploaded/
+        </code>
+        <div className="checklist-note" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>The chatbot terminal detects uploads automatically.</div>
       </div>
     </div>
   );

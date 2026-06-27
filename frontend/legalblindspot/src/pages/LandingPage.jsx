@@ -3,6 +3,13 @@ import { useEffect, useRef } from 'react';
 import Badge from '../components/shared/Badge';
 import heroBg from "../assets/landing_page_pic.jpg";
 import { useAuth } from '../context/AuthContext';
+import { 
+  Scale, 
+  Search, 
+  Sparkles, 
+  CheckCircle, 
+  Shield 
+} from 'lucide-react';
 
 export default function LandingPage() {
   const observerRef = useRef(null);
@@ -51,9 +58,10 @@ export default function LandingPage() {
 
         <nav className="landing-nav" style={{ justifyContent: 'space-between' }}>
           <div className="landing-logo">
-            <span className="logo-icon">⚖</span>
-            <span className="logo-text">LegalLink</span>
-            <Badge variant="danger" size="sm">BETA</Badge>
+            <span className="logo-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Scale size={20} />
+            </span>
+            <span className="logo-text" style={{ marginLeft: '8px' }}>LegalLink</span>
           </div>
           <div className="nav-links-row">
             <a href="#features" className="nav-link-item">Features</a>
@@ -65,9 +73,6 @@ export default function LandingPage() {
             {isAuthenticated ? (
               <>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</span>
-                <Link to={user?.role === 'lawyer' ? '/lawyer' : '/dashboard'} className="nav-cta-btn" style={{ padding: '8px 16px' }}>
-                  Portal
-                </Link>
                 <button onClick={logout} style={{
                   background: 'transparent',
                   border: '1px solid rgba(255,255,255,0.2)',
@@ -107,7 +112,7 @@ export default function LandingPage() {
               </Link>
             ) : (
               <>
-                <Link to="/onboarding" className="hero-cta-btn">
+                <Link to="/login" className="hero-cta-btn">
                   Start Case Assessment
                   <span className="btn-arrow">→</span>
                 </Link>
@@ -124,14 +129,13 @@ export default function LandingPage() {
       {/* ── Quick Feature Strip (visible before scroll) ── */}
       <div className="hero-feature-strip">
         {[
-          { icon: '🔍', label: 'Find Lawyers' },
-          { icon: '⚡', label: 'Case Assessment' },
-          { icon: '✓', label: 'Verify Advice' },
-          // { icon: '📋', label: 'Document Checklist' },
-          { icon: 'T', label: 'Trust Scores' },
+          { icon: <Search size={16} />, label: 'Find Lawyers' },
+          { icon: <Sparkles size={16} />, label: 'Case Assessment' },
+          { icon: <CheckCircle size={16} />, label: 'Verify Advice' },
+          { icon: <Shield size={16} />, label: 'Trust Scores' },
         ].map((f, i) => (
           <div className="strip-item" key={i}>
-            <span className="strip-icon">{f.icon}</span>
+            <span className="strip-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>{f.icon}</span>
             <span className="strip-label">{f.label}</span>
           </div>
         ))}
@@ -148,14 +152,13 @@ export default function LandingPage() {
           </div>
           <div className="features-grid">
             {[
-              { icon: '🔍', title: 'Find the Right Lawyer', desc: 'Filter by city, case type, and budget. Every advocate has a verified trust score.' },
-              { icon: '⚡', title: 'Know If Your Case Is Worth It', desc: 'Get an honest viability assessment before spending a rupee on legal fees.' },
-              { icon: '✓', title: 'Verify Legal Advice', desc: 'Paste what your lawyer told you. We\'ll tell you if it checks out.' },
-              // { icon: '📋', title: 'Know What Documents You Need', desc: 'Case-specific document checklists so you\'re prepared before the first meeting.' },
-              { icon: '🛡', title: 'Trust Scores for Every Advocate', desc: 'Transparent scoring based on verification, experience, ratings, and case history.' },
+              { icon: <Search size={24} style={{ color: 'var(--accent)' }} />, title: 'Find the Right Lawyer', desc: 'Filter by city, case type, and budget. Every advocate has a verified trust score.' },
+              { icon: <Sparkles size={24} style={{ color: 'var(--accent)' }} />, title: 'Know If Your Case Is Worth It', desc: 'Get an honest viability assessment before spending a rupee on legal fees.' },
+              { icon: <CheckCircle size={24} style={{ color: 'var(--accent)' }} />, title: 'Verify Legal Advice', desc: 'Paste what your lawyer told you. We\'ll tell you if it checks out.' },
+              { icon: <Shield size={24} style={{ color: 'var(--accent)' }} />, title: 'Trust Scores for Every Advocate', desc: 'Transparent scoring based on verification, experience, ratings, and case history.' },
             ].map((f, i) => (
               <div className="feature-card reveal-on-scroll" key={i} style={{ animationDelay: `${i * 60}ms` }}>
-                <span className="feature-icon">{f.icon}</span>
+                <span className="feature-icon" style={{ display: 'inline-flex', marginBottom: '16px' }}>{f.icon}</span>
                 <h4>{f.title}</h4>
                 <p>{f.desc}</p>
               </div>
@@ -209,8 +212,10 @@ export default function LandingPage() {
         <footer className="landing-footer">
           <div className="footer-inner">
             <div className="footer-brand">
-              <span className="logo-icon">⚖</span>
-              <span className="logo-text" style={{ color: '#333' }}>LegalLink</span>
+              <span className="logo-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <Scale size={20} />
+              </span>
+              <span className="logo-text" style={{ color: '#333', marginLeft: '8px' }}>LegalLink</span>
             </div>
             <p className="footer-warning">
               LegalLink is for informational purposes only and not a substitute for formal legal advice.

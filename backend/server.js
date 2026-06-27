@@ -67,12 +67,6 @@ if (process.env.SMTP_HOST) {
 
 const transporter = nodemailer.createTransport(transportConfig);
 
-
-
-
-
-
-// Helper to send a verification email (passwordless signup)
 async function sendVerificationEmail(email, token) {
   const verificationUrl = `${process.env.APP_URL || 'http://localhost:3000'}/magic-link?token=${token}`;
   const mailOptions = {
@@ -177,7 +171,7 @@ function getSessionOrThrow(sessionId) {
 
 // Client signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, password, role } = req.body;
+  const { name, email, password, role, city } = req.body;
   if (!email || !password || !role) {
     return res.status(400).json({ error: 'Email, password, and role are required' });
   }
@@ -195,8 +189,10 @@ app.post('/api/auth/signup', async (req, res) => {
       }
       
       // Update unverified user details and resend email
+      existingUser.name = name;
       existingUser.passwordHash = passwordHash;
       existingUser.role = role;
+      existingUser.city = city;
       await existingUser.save();
 
       const token = jwt.sign({ sub: existingUser._id.toString(), email: existingUser.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
@@ -206,9 +202,11 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const user = await User.create({
+      name,
       email: emailLower,
       passwordHash,
       role,
+      city,
       emailVerified: false,
     });
 
@@ -239,7 +237,7 @@ app.post('/api/auth/verify', async (req, res) => {
     }
 
     const sessionJwt = jwt.sign(
-      { sub: user._id.toString(), email: user.email, role: user.role },
+      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -290,12 +288,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Wait, the client decided to enforce magic link verification, but if they are already verified we can issue JWT
     const token = jwt.sign(
-      { sub: user._id.toString(), email: user.email, role: user.role },
+      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id: user._id, email: user.email, role: user.role } });
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: user.name, city: user.city } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: err.message });
