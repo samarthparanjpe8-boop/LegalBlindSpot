@@ -1,0 +1,17 @@
+{
+  "name": "legallink-backend",
+  "version": "1.0.0",
+  "main": "chat.js",
+  "scripts": {
+    "start": "node chat.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "latest",
+    "mongoose": "latest",
+    "chalk": "4",
+    "ora": "5",
+    "dotenv": "latest",
+    "chokidar": "latest"
+  }
+}
