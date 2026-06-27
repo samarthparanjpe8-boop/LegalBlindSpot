@@ -107,12 +107,20 @@ async function withModelRetry(operation, useJsonModel = false) {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
+      // Enforce a 1-second spacing delay before any Gemini API call to prevent burst/concurrent requests
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       const m = useJsonModel ? getJsonModel() : getChatModel();
       return await operation(m);
     } catch (err) {
       lastError = err;
-      if (isRetryableModelError(err) && switchToNextModel()) {
-        continue;
+      if (isRetryableModelError(err)) {
+        console.warn(`Retryable error encountered: ${err.message || err}. Retrying in 2 seconds...`);
+        // Wait 2 seconds for rate limits/quota to reset before retrying
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (switchToNextModel()) {
+          continue;
+        }
       }
       throw err;
     }
@@ -374,7 +382,8 @@ User message: ${userMessage}`;
 
   try {
     return await generateJson(prompt);
-  } catch {
+  } catch (err) {
+    console.error('Gemini API Error in detectCaseAndBudget:', err.message || err);
     return detectCaseAndBudgetLocally(userMessage);
   }
 }
@@ -493,7 +502,8 @@ Return a single JSON object:
 
   try {
     return await generateJson(prompt);
-  } catch {
+  } catch (err) {
+    console.error('Gemini API Error in checkAdvice:', err.message || err);
     return {
       verdict: 'Partially Correct',
       explanation:
@@ -532,7 +542,8 @@ Return a single JSON object:
 
   try {
     return normalizeViabilityResult(await generateJson(prompt));
-  } catch {
+  } catch (err) {
+    console.error('Gemini API Error in assessViability:', err.message || err);
     return normalizeViabilityResult(assessViabilityLocally(description, caseType));
   }
 }
@@ -551,7 +562,8 @@ Answers: ${JSON.stringify(answers)}`;
 
   try {
     return await generateJson(prompt);
-  } catch {
+  } catch (err) {
+    console.error('Gemini API Error in runIntake:', err.message || err);
     const local = detectCaseAndBudgetLocally(
       `${answers.otherParty} ${answers.whatHappened}`
     );
@@ -580,7 +592,8 @@ List 4 to 6 key documents.`;
       return result;
     }
     return defaultDocumentChecklist(caseType);
-  } catch {
+  } catch (err) {
+    console.error('Gemini API Error in getDocumentChecklist:', err.message || err);
     return defaultDocumentChecklist(caseType);
   }
 }

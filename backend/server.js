@@ -159,7 +159,8 @@ ${JSON.stringify(
     const result = await geminiService.chatReply(message, session.history, context);
     session.history = result.history;
     return result.content;
-  } catch {
+  } catch (err) {
+    console.error('Gemini API Error in getChatReply:', err.message || err);
     return null;
   }
 }
