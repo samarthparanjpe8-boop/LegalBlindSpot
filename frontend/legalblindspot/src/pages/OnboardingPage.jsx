@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Spinner from '../components/shared/Spinner';
-import './OnboardingPage.css';
 
 const CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'];
 const BUDGETS = [500, 1000, 2000, 3000, 5000];

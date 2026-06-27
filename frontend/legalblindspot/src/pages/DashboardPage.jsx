@@ -12,7 +12,6 @@ import Spinner from '../components/shared/Spinner';
 import EmptyState from '../components/shared/EmptyState';
 import { useChat } from '../hooks/useChat';
 import { useAdvocates } from '../hooks/useAdvocates';
-import './DashboardPage.css';
 
 export default function DashboardPage({ session, updateCity, updateBudget, setCaseType, addToast }) {
   const [activeTab, setActiveTab] = useState('chat');

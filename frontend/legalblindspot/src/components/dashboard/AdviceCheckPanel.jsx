@@ -3,7 +3,6 @@ import Badge from '../shared/Badge';
 import Spinner from '../shared/Spinner';
 import EmptyState from '../shared/EmptyState';
 import * as api from '../../services/api';
-import './AdviceCheckPanel.css';
 
 export default function AdviceCheckPanel({ caseType }) {
   const [advice, setAdvice] = useState('');

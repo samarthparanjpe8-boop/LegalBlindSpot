@@ -2,7 +2,6 @@ import { useState } from 'react';
 import IntakeQuestion from './IntakeQuestion';
 import Spinner from '../shared/Spinner';
 import * as api from '../../services/api';
-import './IntakeFlow.css';
 
 const DOMAINS = [
   { value: 'housing', label: 'Renting & Housing', icon: '🏠', desc: 'Tenancy disputes, rent, eviction, deposits' },

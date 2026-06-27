@@ -1,4 +1,3 @@
-import './IntakeQuestion.css';
 
 export default function IntakeQuestion({ question, options, selectedValue, onSelect, multiSelect = false }) {
   const isSelected = (value) => {
