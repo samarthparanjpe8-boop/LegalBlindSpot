@@ -55,6 +55,18 @@ export function useSession() {
     setSession(prev => ({ ...prev, caseType }));
   }, []);
 
+  const switchSession = useCallback(async (sessionId) => {
+    localStorage.setItem('legallink_sessionId', sessionId);
+    const data = await api.getSession(sessionId);
+    setSession({
+      sessionId,
+      city: data.city,
+      budget: data.budget,
+      caseType: data.caseType || null,
+    });
+    return sessionId;
+  }, []);
+
   const clearSession = useCallback(() => {
     localStorage.removeItem('legallink_sessionId');
     setSession({ sessionId: null, city: null, budget: null, caseType: null });
@@ -67,6 +79,7 @@ export function useSession() {
     updateCity,
     updateBudget,
     setCaseType,
-    clearSession
+    clearSession,
+    switchSession,
   };
 }

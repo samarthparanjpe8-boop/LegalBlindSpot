@@ -1,8 +1,9 @@
 import { formatTime, formatCurrency } from '../../utils/formatters';
 import TrustBadge from '../shared/TrustBadge';
 
-export default function ChatMessage({ message }) {
+export default function ChatMessage({ message, intakeComplete = false }) {
   const isUser = message.role === 'user';
+  const showAdvocates = intakeComplete && message.advocates && message.advocates.length > 0;
 
   return (
     <div className={`chat-message ${isUser ? 'chat-message-user' : 'chat-message-bot'} ${message.isError ? 'chat-message-error' : ''}`}>
@@ -43,13 +44,13 @@ export default function ChatMessage({ message }) {
             <div className="chat-viability-score-row">
               <div className="chat-viability-donut-mini">
                 <svg viewBox="0 0 100 100" className="viability-svg-mini">
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" strokeWidth="10" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--dash-border)" strokeWidth="10" />
                   <circle
                     cx="50" cy="50" r="42"
                     fill="none"
                     stroke={message.viability.score > 70 ? 'var(--success)' : message.viability.score >= 50 ? 'var(--warning)' : 'var(--danger)'}
                     strokeWidth="10"
-                    strokeLinecap="round"
+                    strokeLinecap="square"
                     strokeDasharray={2 * Math.PI * 42}
                     strokeDashoffset={2 * Math.PI * 42 - (message.viability.score / 100) * 2 * Math.PI * 42}
                     transform="rotate(-90 50 50)"
@@ -123,10 +124,10 @@ export default function ChatMessage({ message }) {
           </div>
         )}
 
-        {message.advocates && message.advocates.length > 0 && (
+        {showAdvocates && (
           <div className="chat-inline-advocates">
             {message.advocates.slice(0, 3).map((adv, i) => (
-              <div key={i} className="chat-advocate-mini">
+              <div key={i} className="chat-advocate-mini glass-card-sm">
                 <div className="chat-advocate-mini-header">
                   <strong>{adv.name}</strong>
                   {adv.trustScore != null && (

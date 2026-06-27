@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const LawyerDashboard = () => {
   const { logout, user } = useAuth();
@@ -10,12 +11,14 @@ const LawyerDashboard = () => {
 
   const fetchRequests = async () => {
     try {
-      const res = await axios.get('/api/requests/lawyer', {
+      const res = await fetch(`${BASE_URL}/api/requests/lawyer`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
       });
-      setRequests(res.data.data || []);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch case requests');
+      setRequests(data.data !== undefined ? data.data : data || []);
     } catch (err) {
       setError('Failed to fetch case requests');
       console.error(err);
@@ -30,15 +33,20 @@ const LawyerDashboard = () => {
 
   const handleDecision = async (id, decision) => {
     try {
-      await axios.post(`/api/requests/${id}/decision`, { decision }, {
+      const res = await fetch(`${BASE_URL}/api/requests/${id}/decision`, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+        },
+        body: JSON.stringify({ decision })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed to ${decision} the case request.`);
       // Refresh list
       fetchRequests();
     } catch (err) {
-      alert(`Failed to ${decision} the case request.`);
+      alert(err.message);
       console.error(err);
     }
   };
@@ -156,7 +164,7 @@ const LawyerDashboard = () => {
                     {req.attachments.map((file, idx) => (
                       <a
                         key={idx}
-                        href={`/uploads/${file.filename}`}
+                        href={`${BASE_URL}/uploads/${file.filename}`}
                         target="_blank"
                         rel="noreferrer"
                         style={{

@@ -468,7 +468,25 @@ ${JSON.stringify(
   }
 }
 
-async function upsertCaseFile(session, description) {
+function isIntakeComplete(session) {
+  const userMsgs = (session.history || []).filter((h) => h.role === 'user');
+  if (userMsgs.length < 3 || !session.caseType) return false;
+
+  const allUserText = userMsgs.map((m) => m.content.toLowerCase()).join(' ');
+  const hasConcept = userMsgs.some((m) => m.content.trim().length > 25);
+  const evidenceKeywords = [
+    'document', 'proof', 'receipt', 'screenshot', 'email', 'whatsapp',
+    'contract', 'agreement', 'photo', 'record', 'certificate', 'evidence',
+    'no proof', 'no document', "don't have", 'dont have', 'nothing', 'none',
+    'bank statement', 'letter', 'notice', 'fir', 'complaint',
+  ];
+  const hasEvidence = evidenceKeywords.some((k) => allUserText.includes(k));
+  const hasCaseSpecific = userMsgs.length >= 3;
+
+  return hasConcept && hasEvidence && hasCaseSpecific;
+}
+
+async function upsertCaseFile(session, description, userId) {
   const existing = await CaseFile.findOne({ sessionId: session.sessionId });
   if (existing) {
     if (session.caseType) existing.caseType = session.caseType;
@@ -476,6 +494,7 @@ async function upsertCaseFile(session, description) {
     existing.budgetInr = session.budget;
     existing.caseSummary = description || existing.caseSummary;
     existing.chatHistory = session.history;
+    if (userId) existing.userId = userId;
     return existing.save();
   }
 
@@ -490,6 +509,7 @@ async function upsertCaseFile(session, description) {
 
   return CaseFile.create({
     sessionId: session.sessionId,
+    userId: userId || null,
     caseType: session.caseType || null,
     city: session.city,
     budgetInr: session.budget,
@@ -520,8 +540,34 @@ app.post('/api/session', (req, res) => {
   sendData(res, session, 201);
 });
 
-app.get('/api/session/:sessionId', (req, res) => {
-  const session = getSessionOrThrow(req.params.sessionId);
+app.get('/api/session/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  let session = sessions.get(sessionId);
+
+  if (!session) {
+    try {
+      const caseFile = await CaseFile.findOne({ sessionId }).lean();
+      if (caseFile) {
+        session = {
+          sessionId,
+          city: caseFile.city,
+          budget: caseFile.budgetInr,
+          caseType: caseFile.caseType || null,
+          history: caseFile.chatHistory || [],
+          lastUserMessage: '',
+          lastViabilityResult: null,
+        };
+        sessions.set(sessionId, session);
+      }
+    } catch (err) {
+      console.error('Failed to restore session from CaseFile:', err.message);
+    }
+  }
+
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
   sendData(res, session);
 });
 
@@ -542,7 +588,7 @@ app.post('/api/detect-case', async (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-  const { message, sessionId } = req.body;
+  const { message, sessionId, userId } = req.body;
   if (!message || !sessionId) {
     return res.status(400).json({ error: 'Message and sessionId are required' });
   }
@@ -596,12 +642,16 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  const advocates = await findAdvocates({
-    city: session.city,
-    caseType: session.caseType,
-    maxBudget: session.budget,
-    limit: 5,
-  });
+  const intakeComplete = isIntakeComplete(session);
+
+  const advocates = intakeComplete
+    ? await findAdvocates({
+        city: session.city,
+        caseType: session.caseType,
+        maxBudget: session.budget,
+        limit: 5,
+      })
+    : [];
 
   const aiReply = await getChatReply(message, session, advocates);
   const reply = aiReply || buildFallbackReply(message, detection, advocates);
@@ -611,8 +661,10 @@ app.post('/api/chat', async (req, res) => {
     session.history.push({ role: 'assistant', content: reply });
   }
 
+  const intakeCompleteAfter = isIntakeComplete(session);
+
   try {
-    await upsertCaseFile(session, message);
+    await upsertCaseFile(session, message, userId);
     if (session.caseType) {
       await CaseAssessment.create({
         userDescription: message,
@@ -637,8 +689,53 @@ app.post('/api/chat', async (req, res) => {
     city: session.city,
     budget: session.budget,
     viability,
-    advocates,
+    advocates: intakeCompleteAfter ? advocates : [],
+    intakeComplete: intakeCompleteAfter,
   });
+});
+
+app.get('/api/chat/history/:sessionId', async (req, res) => {
+  try {
+    const caseFile = await CaseFile.findOne({ sessionId: req.params.sessionId }).lean();
+    if (!caseFile) {
+      return sendData(res, { sessionId: req.params.sessionId, messages: [], caseType: null, city: null, budget: null });
+    }
+    sendData(res, {
+      sessionId: caseFile.sessionId,
+      userId: caseFile.userId,
+      messages: caseFile.chatHistory || [],
+      caseType: caseFile.caseType,
+      city: caseFile.city,
+      budget: caseFile.budgetInr,
+      updatedAt: caseFile.createdAt,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/chat/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const caseFiles = await CaseFile.find({ userId })
+      .sort({ createdAt: -1 })
+      .select('sessionId caseType city budgetInr caseSummary chatHistory createdAt')
+      .lean();
+
+    const sessions = caseFiles.map((cf) => ({
+      sessionId: cf.sessionId,
+      caseType: cf.caseType,
+      city: cf.city,
+      budget: cf.budgetInr,
+      preview: cf.caseSummary || (cf.chatHistory?.[0]?.content || '').slice(0, 120),
+      messageCount: (cf.chatHistory || []).length,
+      updatedAt: cf.createdAt,
+    }));
+
+    sendData(res, sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/assess', async (req, res) => {

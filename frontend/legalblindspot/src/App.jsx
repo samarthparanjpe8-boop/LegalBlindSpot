@@ -14,7 +14,7 @@ import { AuthProvider } from './context/AuthContext';
 import { useSession } from './hooks/useSession';
 
 export default function App() {
-  const { session, createSession, updateCity, updateBudget, setCaseType, clearSession } = useSession();
+  const { session, createSession, updateCity, updateBudget, setCaseType, clearSession, switchSession } = useSession();
   const [toasts, setToasts] = useState([]);
 
   const addToast = (message, type = 'info') => {
@@ -45,6 +45,7 @@ export default function App() {
                     updateBudget={updateBudget}
                     setCaseType={setCaseType}
                     clearSession={clearSession}
+                    switchSession={switchSession}
                     addToast={addToast}
                     createSession={createSession}
                   />

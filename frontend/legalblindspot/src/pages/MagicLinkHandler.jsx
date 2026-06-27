@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const MagicLinkHandler = () => {
   const [searchParams] = useSearchParams();
@@ -17,8 +18,14 @@ const MagicLinkHandler = () => {
 
     const verifyToken = async () => {
       try {
-        const res = await axios.post('/api/auth/verify', { token });
-        const jwtToken = res.data.jwt;
+        const res = await fetch(`${BASE_URL}/api/auth/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Verification failed');
+        const jwtToken = data.jwt;
         localStorage.setItem('token', jwtToken);
 
         const payload = JSON.parse(atob(jwtToken.split('.')[1]));
@@ -32,7 +39,7 @@ const MagicLinkHandler = () => {
         }, 1000);
       } catch (err) {
         console.error('Magic link verification failed:', err);
-        setError(err.response?.data?.error || 'Verification failed. The link may have expired.');
+        setError(err.message || 'Verification failed. The link may have expired.');
       }
     };
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -27,13 +28,19 @@ const ResetPasswordPage = () => {
     setMessage('');
     setError('');
     try {
-      const res = await axios.post('/api/auth/reset-password', { token, password });
-      setMessage(res.data.message || 'Password successfully updated.');
+      const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || 'Failed to reset password');
+      setMessage(data.message || 'Password successfully updated.');
       setTimeout(() => {
         navigate('/login');
       }, 2000);
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to reset password');
+      setError(err.message || 'Failed to reset password');
     } finally {
       setLoading(false);
     }

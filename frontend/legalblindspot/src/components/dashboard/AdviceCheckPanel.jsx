@@ -4,7 +4,7 @@ import Spinner from '../shared/Spinner';
 import * as api from '../../services/api';
 import { HelpCircle, CheckCircle, AlertTriangle, AlertOctagon, Scale, BookOpen } from 'lucide-react';
 
-export default function AdviceCheckPanel({ caseType }) {
+export default function AdviceCheckPanel({ caseType, sessionId }) {
   const [advice, setAdvice] = useState('');
   const [result, setResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,7 +17,7 @@ export default function AdviceCheckPanel({ caseType }) {
     setIsLoading(true);
     setError(null);
 
-    api.checkAdvice(advice.trim(), caseType || '')
+    api.checkAdvice(advice.trim(), caseType || '', sessionId)
       .then(data => {
         setResult(data);
         setHistory(prev => [{ advice: advice.trim(), result: data, date: new Date().toISOString() }, ...prev]);

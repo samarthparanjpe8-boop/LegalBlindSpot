@@ -4,6 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev": "node server.js",
     "chat": "node chat.js",
     "seed": "node seed.js"
   },

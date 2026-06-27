@@ -21,41 +21,47 @@ export default function DocumentChecklist({ caseType, sessionId }) {
       { name: 'Written Communications (WhatsApp/Emails)', desc: 'Record of disputes or agreements with the landlord' },
       { name: 'Electricity/Water Bills', desc: 'Proof of utility billing and occupancy' }
     ],
-    'Property Dispute': [
+    'Property Disputes': [
       { name: 'Sale Deed / Title Deed', desc: 'Primary document proving ownership status' },
       { name: 'Property Tax Receipts', desc: 'Proof of continuous possession and tax payments' },
       { name: 'Mutation Certificate', desc: 'Proof of registration of title in revenue records' },
       { name: 'Survey Map / Patta', desc: 'Official boundaries and land categorization record' }
     ],
-    'Labor / Employment Dispute': [
+    'Employment Law': [
       { name: 'Offer Letter / Employment Contract', desc: 'Proves employment status, terms, and salary details' },
       { name: 'Salary Slips / Bank Statement', desc: 'Proof of actual payments made and pending amounts' },
       { name: 'Termination Letter / Email', desc: 'If applicable, states the formal grounds for termination' },
       { name: 'Company Policy / Employee Handbook', desc: 'Reference for standard dispute or notice rules' }
     ],
-    'Family Dispute': [
+    'Family Law': [
       { name: 'Marriage Certificate', desc: 'Legal proof of marriage' },
       { name: 'Identity Proofs of both parties', desc: 'Aadhaar, Passport, or PAN card' },
       { name: 'Income Proof / Asset List', desc: 'Necessary for maintenance and property division claims' },
       { name: 'Any past police complaints or mediation records', desc: 'Proof of prior attempts or disputes' }
     ],
-    'Consumer Grievance': [
+    'Consumer Complaints': [
       { name: 'Purchase Invoice / Bill', desc: 'Primary proof of transaction and amount paid' },
       { name: 'Warranty Card', desc: 'Proof of coverage and warranty terms' },
       { name: 'Written correspondence with seller/company', desc: 'Proof of escalation and seller response' },
       { name: 'Photographs of the defective product', desc: 'Visual proof of issues or damage' }
     ],
-    'Contract Dispute': [
-      { name: 'Signed Agreement / Contract', desc: 'Primary copy of terms, conditions, and signatures' },
-      { name: 'Invoices / Bills Sent', desc: 'Records of services/goods delivered and values' },
-      { name: 'Payment Proofs / Ledger', desc: 'Proof of partial payments or defaults' },
-      { name: 'Breach Notice / Legal Notices', desc: 'Formal communications sent notifying the breach' }
+    'Criminal Defense': [
+      { name: 'First Information Report (FIR) Copy', desc: 'Official complaint registered by the police' },
+      { name: 'Arrest Memo / Bail Order (if any)', desc: 'Documents related to custody or temporary release' },
+      { name: 'Show Cause Notice or Summons', desc: 'Court order directing appearance or response' },
+      { name: 'Evidence / Alibi Proofs', desc: 'Photos, videos, location logs, or witness details' }
     ],
-    'Defamation': [
-      { name: 'Defamatory Statement Evidence', desc: 'Screenshots, articles, voice records, or videos of statements' },
-      { name: 'Proof of Publication', desc: 'Evidence that statement reached a third party' },
-      { name: 'Damage/Loss Records', desc: 'Loss of job, business records, or impact statements' },
-      { name: 'Response / Retraction Demands', desc: 'Notices sent requesting apology or removal' }
+    'Cybercrime': [
+      { name: 'Bank Statement highlighting fraud transactions', desc: 'Proof of monetary loss' },
+      { name: 'Screenshots of phishing emails, messages, or websites', desc: 'Visual evidence of fraud medium' },
+      { name: 'UPI/Transaction Receipts', desc: 'Specific ID and details of transfer' },
+      { name: 'Complaint acknowledgement from National Cyber Crime Portal', desc: 'Proof of official reporting' }
+    ],
+    'RTI Cases': [
+      { name: 'Draft RTI Application', desc: 'The list of specific queries/information requested' },
+      { name: 'Proof of Payment (RTI fee)', desc: 'Receipt of Indian Postal Order, demand draft, or online payment' },
+      { name: 'Response from PIO (if any)', desc: 'Official reply received from Public Information Officer' },
+      { name: 'First Appeal copy (if filed)', desc: 'Appeal sent to Appellate Authority upon rejection or delay' }
     ]
   };
 

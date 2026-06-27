@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import axios from 'axios';
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const AuthContext = createContext();
 
@@ -24,17 +25,37 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const res = await axios.post('/api/auth/login', { email, password });
-    const { token } = res.data;
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err = new Error(data.error || data.message || 'Login failed');
+      err.response = { data };
+      throw err;
+    }
+    const { token } = data;
     localStorage.setItem('token', token);
     const payload = JSON.parse(atob(token.split('.')[1]));
     setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, token });
-    return res;
+    return data;
   };
 
   const signup = async (email, password, role, name, city) => {
-    const res = await axios.post('/api/auth/signup', { email, password, role, name, city });
-    return res;
+    const res = await fetch(`${BASE_URL}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, role, name, city }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err = new Error(data.error || data.message || 'Signup failed');
+      err.response = { data };
+      throw err;
+    }
+    return data;
   };
 
   const logout = () => {
@@ -55,3 +76,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

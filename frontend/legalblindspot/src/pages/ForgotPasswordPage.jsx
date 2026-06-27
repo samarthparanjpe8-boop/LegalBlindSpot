@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
@@ -15,10 +16,16 @@ const ForgotPasswordPage = () => {
     setMessage('');
     setError('');
     try {
-      const res = await axios.post('/api/auth/forgot-password', { email });
-      setMessage(res.data.message || 'If that email exists, we sent a password reset link.');
+      const res = await fetch(`${BASE_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || 'Something went wrong');
+      setMessage(data.message || 'If that email exists, we sent a password reset link.');
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Something went wrong');
+      setError(err.message || 'Something went wrong');
     } finally {
       setLoading(false);
     }

@@ -60,11 +60,11 @@ const EXTRA_DETAILS = [
 
 const MAP_DOMAIN_TO_CASETYPE = {
   housing: 'Tenant Rights',
-  employment: 'Labor / Employment Dispute',
-  property: 'Property Dispute',
-  family: 'Family Dispute',
-  consumer: 'Consumer Grievance',
-  contract: 'Contract Dispute'
+  employment: 'Employment Law',
+  property: 'Property Disputes',
+  family: 'Family Law',
+  consumer: 'Consumer Complaints',
+  contract: 'Consumer Complaints'
 };
 
 export default function IntakeFlow({ onClose, onIntakeComplete }) {

@@ -35,10 +35,10 @@ export async function updateSession(sessionId, updates) {
   });
 }
 
-export async function sendMessage(message, sessionId, history) {
+export async function sendMessage(message, sessionId, history, userId) {
   return request('/api/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, sessionId, history })
+    body: JSON.stringify({ message, sessionId, history, userId })
   });
 }
 
@@ -88,4 +88,22 @@ export async function getLeaderboard() {
 
 export async function getCaseFile(sessionId) {
   return request(`/api/case-file/${sessionId}`);
+}
+
+export async function getChatHistory(sessionId) {
+  return request(`/api/chat/history/${sessionId}`);
+}
+
+export async function getUserChatHistories() {
+  const token = localStorage.getItem('token');
+  const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const res = await fetch(`${BASE}/api/chat/history`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
+  return json.data !== undefined ? json.data : json;
 }

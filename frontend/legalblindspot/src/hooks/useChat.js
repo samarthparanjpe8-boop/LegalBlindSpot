@@ -1,13 +1,84 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import * as api from '../services/api';
+import { getSessionHistory, saveSessionHistory, historyToMessages, computeIntakeComplete } from '../utils/chatHistory';
 
-export function useChat(sessionId) {
+export function useChat(sessionId, userId) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [detectedCase, setDetectedCase] = useState(null);
-  const [inlineAdvocates, setInlineAdvocates] = useState([]);
+  const [intakeComplete, setIntakeComplete] = useState(false);
   const historyRef = useRef([]);
+  const loadedSessionRef = useRef(null);
+
+  const persistHistory = useCallback((msgs, meta = {}) => {
+    if (!userId || !sessionId) return;
+    saveSessionHistory(userId, sessionId, {
+      messages: msgs,
+      ...meta,
+    });
+  }, [userId, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setMessages([]);
+      historyRef.current = [];
+      setDetectedCase(null);
+      setIntakeComplete(false);
+      loadedSessionRef.current = null;
+      return;
+    }
+
+    if (loadedSessionRef.current === sessionId) return;
+
+    loadedSessionRef.current = sessionId;
+    setMessages([]);
+    historyRef.current = [];
+    setDetectedCase(null);
+    setIntakeComplete(false);
+
+    let cancelled = false;
+
+    async function loadHistory() {
+      const local = userId ? getSessionHistory(userId, sessionId) : null;
+      if (local?.messages?.length) {
+        const msgs = local.messages;
+        if (!cancelled) {
+          setMessages(msgs);
+          historyRef.current = msgs.map((m) => ({ role: m.role, content: m.content }));
+          const caseType = local.caseType || null;
+          setDetectedCase(caseType);
+          setIntakeComplete(local.intakeComplete ?? computeIntakeComplete(msgs, caseType));
+        }
+      }
+
+      try {
+        const remote = await api.getChatHistory(sessionId);
+        if (cancelled) return;
+        if (remote?.messages?.length) {
+          const msgs = historyToMessages(remote.messages);
+          setMessages(msgs);
+          historyRef.current = msgs.map((m) => ({ role: m.role, content: m.content }));
+          const caseType = remote.caseType || null;
+          if (caseType) setDetectedCase(caseType);
+          const complete = computeIntakeComplete(msgs, caseType);
+          setIntakeComplete(complete);
+          persistHistory(msgs, {
+            caseType,
+            city: remote.city,
+            budget: remote.budget,
+            intakeComplete: complete,
+            title: caseType || 'Consultation',
+          });
+        }
+      } catch {
+        // offline or no backend history yet
+      }
+    }
+
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [sessionId, userId, persistHistory]);
 
   const sendMessage = useCallback(async (text) => {
     if (!text.trim()) return;
@@ -20,19 +91,23 @@ export function useChat(sessionId) {
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => {
+      const next = [...prev, userMsg];
+      persistHistory(next);
+      return next;
+    });
     historyRef.current = [...historyRef.current, { role: 'user', content: text }];
     setIsLoading(true);
 
     try {
-      const res = await api.sendMessage(text, sessionId, historyRef.current);
+      const res = await api.sendMessage(text, sessionId, historyRef.current, userId);
 
       const botMsg = {
         id: Date.now() + 1,
         role: 'assistant',
         content: res.reply || res.message || res,
         timestamp: new Date().toISOString(),
-        advocates: res.advocates || null,
+        advocates: res.intakeComplete ? (res.advocates || null) : null,
         caseDetected: res.caseType || null,
         viability: res.viability || null
       };
@@ -41,12 +116,20 @@ export function useChat(sessionId) {
         setDetectedCase(res.caseType);
       }
 
-      if (res.advocates && res.advocates.length > 0) {
-        setInlineAdvocates(res.advocates);
+      if (res.intakeComplete) {
+        setIntakeComplete(true);
       }
 
       historyRef.current = [...historyRef.current, { role: 'assistant', content: botMsg.content }];
-      setMessages(prev => [...prev, botMsg]);
+      setMessages(prev => {
+        const next = [...prev, botMsg];
+        persistHistory(next, {
+          caseType: res.caseType || detectedCase,
+          intakeComplete: res.intakeComplete || intakeComplete,
+          title: res.caseType || 'Consultation',
+        });
+        return next;
+      });
     } catch (err) {
       setError(err.message);
       const errMsg = {
@@ -56,18 +139,23 @@ export function useChat(sessionId) {
         timestamp: new Date().toISOString(),
         isError: true
       };
-      setMessages(prev => [...prev, errMsg]);
+      setMessages(prev => {
+        const next = [...prev, errMsg];
+        persistHistory(next);
+        return next;
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, userId, persistHistory, detectedCase, intakeComplete]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
     historyRef.current = [];
     setDetectedCase(null);
-    setInlineAdvocates([]);
+    setIntakeComplete(false);
     setError(null);
+    loadedSessionRef.current = null;
   }, []);
 
   return {
@@ -75,8 +163,8 @@ export function useChat(sessionId) {
     isLoading,
     error,
     detectedCase,
-    inlineAdvocates,
+    intakeComplete,
     sendMessage,
-    clearHistory
+    clearHistory,
   };
 }
