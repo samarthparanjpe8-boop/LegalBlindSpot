@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import './DocumentChecklist.css';
 
 export default function DocumentChecklist({ caseType, sessionId }) {
   const [readyDocs, setReadyDocs] = useState({});

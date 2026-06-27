@@ -4,7 +4,6 @@ import EmptyState from '../shared/EmptyState';
 import Badge from '../shared/Badge';
 import AdvocateCard from '../advocates/AdvocateCard';
 import * as api from '../../services/api';
-import './CaseFileSummary.css';
 
 export default function CaseFileSummary({ sessionId }) {
   const [data, setData] = useState(null);

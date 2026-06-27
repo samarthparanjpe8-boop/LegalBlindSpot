@@ -4,7 +4,6 @@ import LandingPage from './pages/LandingPage';
 import OnboardingPage from './pages/OnboardingPage';
 import DashboardPage from './pages/DashboardPage';
 import { useSession } from './hooks/useSession';
-import './App.css';
 
 export default function App() {
   const { session, createSession, updateCity, updateBudget, setCaseType } = useSession();

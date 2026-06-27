@@ -4,7 +4,6 @@ import Spinner from '../shared/Spinner';
 import Badge from '../shared/Badge';
 import { formatCurrency, formatPercent } from '../../utils/formatters';
 import * as api from '../../services/api';
-import './ViabilityCard.css';
 
 export default function ViabilityCard({ caseType, sessionDescription }) {
   const [result, setResult] = useState(null);
