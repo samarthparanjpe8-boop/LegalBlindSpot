@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatCurrency } from '../../utils/formatters';
 
-const CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'];
+const CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata', 'Nagpur'];
 
 export default function SessionPanel({ session, onCityChange, onBudgetChange }) {
   const [editingCity, setEditingCity] = useState(false);

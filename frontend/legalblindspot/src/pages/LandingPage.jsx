@@ -86,7 +86,7 @@ export default function LandingPage() {
           { icon: '⚡', label: 'Case Assessment' },
           { icon: '✓', label: 'Verify Advice' },
           // { icon: '📋', label: 'Document Checklist' },
-          { icon: '🛡', label: 'Trust Scores' },
+          { icon: 'T', label: 'Trust Scores' },
         ].map((f, i) => (
           <div className="strip-item" key={i}>
             <span className="strip-icon">{f.icon}</span>
@@ -130,7 +130,7 @@ export default function LandingPage() {
           <div className="how-it-works-steps">
             {[
               { num: '01', title: 'Setup Your Session', desc: 'Select your city and set your legal budget so we can personalize matches.' },
-              { num: '02', title: 'Discuss Your Situation', desc: 'Chat with our AI assistant in Hindi, English, or Hinglish to summarize your issue.' },
+              { num: '02', title: 'Discuss Your Situation', desc: 'Chat with our AI assistant in English to summarize your issue.' },
               { num: '03', title: 'Evaluate Case & Advice', desc: 'Assess case viability, download checklist documents, or check legal counsel advice.' },
               { num: '04', title: 'Connect with Advocates', desc: 'View ranked matching lawyers with transparent, verified trust breakdown scores.' }
             ].map((s, i) => (
@@ -173,11 +173,6 @@ export default function LandingPage() {
             <p className="footer-warning">
               LegalLink is for informational purposes only and not a substitute for formal legal advice.
             </p>
-            <div className="footer-bottom-row">
-              <p className="footer-credits">
-                Built for Binge N Build 2026 Hackathon &nbsp;·&nbsp; The Codebreakers Club
-              </p>
-            </div>
           </div>
         </footer>
       </div>

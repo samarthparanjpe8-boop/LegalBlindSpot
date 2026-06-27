@@ -400,6 +400,37 @@ function assessViabilityLocally(description, caseType) {
   };
 }
 
+async function chatReply(userMessage, history, contextString) {
+  return withModelRetry(async (m) => {
+    const contents = [];
+
+    history.forEach((entry) => {
+      contents.push({
+        role: entry.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: entry.content }],
+      });
+    });
+
+    const messageWithContext = contextString
+      ? `${contextString}\n\nUser message: ${userMessage}`
+      : userMessage;
+
+    contents.push({ role: 'user', parts: [{ text: messageWithContext }] });
+
+    const result = await m.generateContent({ contents });
+    const content = result.response.text();
+
+    return {
+      content,
+      history: [
+        ...history,
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content },
+      ],
+    };
+  }, false);
+}
+
 function normalizeViabilityResult(result) {
   const viabilityScore = Number(result.viabilityScore ?? result.score ?? 0);
 
@@ -556,6 +587,7 @@ List 4 to 6 key documents.`;
 
 module.exports = {
   chat,
+  chatReply,
   detectCaseAndBudget,
   checkAdvice,
   assessViability,

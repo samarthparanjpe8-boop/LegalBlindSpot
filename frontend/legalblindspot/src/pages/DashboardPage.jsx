@@ -17,10 +17,6 @@ export default function DashboardPage({ session, updateCity, updateBudget, setCa
   const [activeTab, setActiveTab] = useState('chat');
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
-  if (!session.sessionId) {
-    return <Navigate to="/onboarding" replace />;
-  }
-
   const {
     messages,
     isLoading: chatLoading,
@@ -41,6 +37,10 @@ export default function DashboardPage({ session, updateCity, updateBudget, setCa
       addToast(`Case detected: ${detectedCase}`, 'info');
     }
   }, [detectedCase, session.caseType, setCaseType, addToast]);
+
+  if (!session.sessionId) {
+    return <Navigate to="/onboarding" replace />;
+  }
 
   const handleCityChange = async (city) => {
     try {

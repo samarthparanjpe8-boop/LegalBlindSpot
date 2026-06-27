@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import EmptyState from '../shared/EmptyState';
 import Spinner from '../shared/Spinner';
 import Badge from '../shared/Badge';
-import { formatCurrency, formatPercent } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import * as api from '../../services/api';
 
 export default function ViabilityCard({ caseType, sessionDescription }) {

@@ -1,7 +1,7 @@
 import { formatTime } from '../../utils/formatters';
 import TrustBadge from '../shared/TrustBadge';
 
-export default function ChatMessage({ message, compact }) {
+export default function ChatMessage({ message }) {
   const isUser = message.role === 'user';
 
   return (
