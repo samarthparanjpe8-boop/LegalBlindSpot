@@ -1,0 +1,149 @@
+.advocate-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  animation: slide-up 0.4s ease both;
+  transition: var(--transition);
+}
+
+.advocate-card:hover {
+  border-color: var(--border-light);
+}
+
+.advocate-card-compact {
+  padding: var(--space-3);
+  gap: var(--space-2);
+}
+
+.advocate-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.advocate-card-name {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.advocate-card-compact .advocate-card-name {
+  font-size: 0.85rem;
+}
+
+.advocate-card-compact-details {
+  display: flex;
+  gap: var(--space-3);
+  font-size: 0.75rem;
+}
+
+.advocate-details-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.advocate-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.detail-icon {
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.detail-sep {
+  color: var(--text-muted);
+}
+
+.detail-muted {
+  color: var(--text-muted);
+}
+
+.fee-ok {
+  color: var(--success);
+}
+
+.fee-over {
+  color: var(--danger);
+}
+
+.advocate-area {
+  color: var(--text-muted);
+}
+
+.advocate-case-history {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+
+.case-history-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.case-history-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: 0.8rem;
+  padding: var(--space-1) 0;
+}
+
+.case-history-type {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.case-history-stats {
+  color: var(--text-secondary);
+}
+
+.case-history-outcome {
+  width: 100%;
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.advocate-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin-top: var(--space-1);
+}
+
+.advocate-expand-btn:hover {
+  color: var(--text-primary);
+}
+
+.expand-arrow {
+  font-size: 0.6rem;
+  transition: transform 0.2s ease;
+}
+
+.expand-arrow-up {
+  transform: rotate(180deg);
+}
