@@ -14,7 +14,7 @@ LegalLink is a free terminal-based legal assistant for first-time users in India
 - Advice checker to verify claims made by lawyers or others
 - Document vault with automatic file detection via folder watching
 - MongoDB persistence for case assessments and case files
-- 25 seeded advocates across major Indian cities
+- 160 seeded advocates across major Indian cities, with 20 advocates per city
 
 ## Prerequisites
 
@@ -74,7 +74,7 @@ Never commit this file -- it is already in `.gitignore`.
 node seed.js
 ```
 
-You should see: `25 advocates seeded successfully`
+You should see: `160 advocates seeded successfully`
 
 Run this only once. Running it again will skip seeding to avoid duplicates.
 

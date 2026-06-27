@@ -311,6 +311,7 @@ const INDIAN_CITIES = [
   'Hyderabad',
   'Pune',
   'Kolkata',
+  'Nagpur',
 ];
 
 function detectCaseAndBudgetLocally(userMessage) {
@@ -399,6 +400,27 @@ function assessViabilityLocally(description, caseType) {
   };
 }
 
+function normalizeViabilityResult(result) {
+  const viabilityScore = Number(result.viabilityScore ?? result.score ?? 0);
+
+  if (viabilityScore >= 50) {
+    return {
+      ...result,
+      viabilityScore,
+    };
+  }
+
+  return {
+    ...result,
+    viabilityScore,
+    verdict: 'Case is not fit for fighting',
+    worthPursuing: false,
+    honestAdvice:
+      result.honestAdvice ||
+      'The viability score is below 50, so this case is not fit for fighting right now. Consider gathering stronger documents, proof, or settlement options before spending money on litigation.',
+  };
+}
+
 function defaultDocumentChecklist(caseType) {
   return [
     {
@@ -478,9 +500,9 @@ Return a single JSON object:
 }`;
 
   try {
-    return await generateJson(prompt);
+    return normalizeViabilityResult(await generateJson(prompt));
   } catch {
-    return assessViabilityLocally(description, caseType);
+    return normalizeViabilityResult(assessViabilityLocally(description, caseType));
   }
 }
 

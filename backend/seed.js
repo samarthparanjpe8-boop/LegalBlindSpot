@@ -6,18 +6,18 @@ const seedAdvocates = require('./data/seedAdvocates');
 async function seed() {
   try {
     await connectDB();
-    const count = await Advocate.countDocuments();
-    if (count > 0) {
-      console.log(`Database already has ${count} advocates. Skipping seed to avoid duplicates.`);
-      console.log('To re-seed, drop the legallink database first.');
-      process.exit(0);
-    }
 
+    // Delete all existing advocates
+    const deleted = await Advocate.deleteMany({});
+    console.log(`Deleted ${deleted.deletedCount} existing advocates.`);
+
+    // Insert fresh data
     await Advocate.insertMany(seedAdvocates);
-    console.log(`25 advocates seeded successfully`);
+    console.log(`${seedAdvocates.length} advocates seeded successfully.`);
+
     process.exit(0);
   } catch (err) {
-    console.error('Seed failed:', err.message);
+    console.error('Seed failed:', err);
     process.exit(1);
   }
 }
