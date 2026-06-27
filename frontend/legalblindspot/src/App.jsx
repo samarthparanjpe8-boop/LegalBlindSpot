@@ -6,7 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import { useSession } from './hooks/useSession';
 
 export default function App() {
-  const { session, createSession, updateCity, updateBudget, setCaseType } = useSession();
+  const { session, createSession, updateCity, updateBudget, setCaseType, clearSession } = useSession();
   const [toasts, setToasts] = useState([]);
 
   const addToast = (message, type = 'info') => {
@@ -40,6 +40,7 @@ export default function App() {
                 updateCity={updateCity}
                 updateBudget={updateBudget}
                 setCaseType={setCaseType}
+                clearSession={clearSession}
                 addToast={addToast}
               />
             }

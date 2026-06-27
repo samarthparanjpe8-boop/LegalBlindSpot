@@ -3,7 +3,7 @@ import { formatCurrency } from '../../utils/formatters';
 
 const CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata', 'Nagpur'];
 
-export default function SessionPanel({ session, onCityChange, onBudgetChange }) {
+export default function SessionPanel({ session, onCityChange, onBudgetChange, onRestartSession }) {
   const [editingCity, setEditingCity] = useState(false);
   const [editingBudget, setEditingBudget] = useState(false);
   const [cityValue, setCityValue] = useState(session.city || '');
@@ -84,6 +84,10 @@ export default function SessionPanel({ session, onCityChange, onBudgetChange }) 
           </span>
         </div>
       </div>
+
+      <button className="session-restart-btn" onClick={onRestartSession}>
+        RESTART SESSION
+      </button>
     </div>
   );
 }

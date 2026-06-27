@@ -119,10 +119,19 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20 }) {
     filter.consultationFeeInr = { $lte: Number(maxBudget) };
   }
 
-  const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit).lean();
-  return advocates
-    .map(normalizeAdvocate)
-    .sort((a, b) => b.trustScore - a.trustScore);
+  try {
+    const total = await Advocate.countDocuments({});
+    console.log(`[Diagnostic] Total advocates in DB: ${total}`);
+    console.log(`[Diagnostic] Query filter used: ${JSON.stringify(filter)}`);
+    const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit).lean();
+    console.log(`[Diagnostic] Matching advocates found: ${advocates.length}`);
+    return advocates
+      .map(normalizeAdvocate)
+      .sort((a, b) => b.trustScore - a.trustScore);
+  } catch (err) {
+    console.error('Error finding advocates:', err);
+    return [];
+  }
 }
 
 function buildFallbackReply(message, detection, advocates) {
@@ -241,7 +250,34 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'Message and sessionId are required' });
   }
 
-  const session = getSessionOrThrow(sessionId);
+  let session;
+  try {
+    session = getSessionOrThrow(sessionId);
+  } catch (err) {
+    let city = 'Delhi';
+    let budget = 5000;
+    let caseType = null;
+    try {
+      const caseFile = await CaseFile.findOne({ sessionId }).lean();
+      if (caseFile) {
+        city = caseFile.city || city;
+        budget = caseFile.budgetInr || budget;
+        caseType = caseFile.caseType || caseType;
+      }
+    } catch (dbErr) {
+      console.error('Failed to query CaseFile during session restoration:', dbErr.message);
+    }
+    session = {
+      sessionId,
+      city,
+      budget,
+      caseType,
+      history: [],
+      lastUserMessage: '',
+      lastViabilityResult: null,
+    };
+    sessions.set(sessionId, session);
+  }
   session.lastUserMessage = message;
 
   const detection = await geminiService.detectCaseAndBudget(message);
@@ -395,8 +431,15 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: err.message || 'Server error' });
 });
 
+const fs = require('fs');
 async function start() {
-  await connectDB();
+  try {
+    await connectDB();
+    fs.writeFileSync('db_test_result.txt', 'DB CONNECTED SUCCESSFUL AT ' + new Date().toISOString());
+  } catch (err) {
+    fs.writeFileSync('db_test_result.txt', 'DB CONNECTION ERROR: ' + err.message + '\nStack: ' + err.stack + '\nAT ' + new Date().toISOString());
+    console.error('Database connection failed:', err.message);
+  }
   app.listen(PORT, () => {
     console.log(`LegalLink API running on http://localhost:${PORT}`);
   });

@@ -20,9 +20,8 @@ const JSON_SYSTEM_INSTRUCTION =
 
 const MODEL_FALLBACKS = [
   process.env.GEMINI_MODEL,
-  'gemini-2.5-flash-lite',
+  'gemini-1.5-flash',
   'gemini-2.0-flash',
-  'gemini-2.5-flash',
 ].filter(Boolean);
 
 let genAI;
@@ -107,17 +106,14 @@ async function withModelRetry(operation, useJsonModel = false) {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      // Enforce a 1-second spacing delay before any Gemini API call to prevent burst/concurrent requests
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
       const m = useJsonModel ? getJsonModel() : getChatModel();
       return await operation(m);
     } catch (err) {
       lastError = err;
       if (isRetryableModelError(err)) {
-        console.warn(`Retryable error encountered: ${err.message || err}. Retrying in 2 seconds...`);
-        // Wait 2 seconds for rate limits/quota to reset before retrying
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        console.warn(`Retryable error encountered: ${err.message || err}. Retrying in 500ms...`);
+        // Wait 500ms for rate limits/quota to reset before retrying
+        await new Promise((resolve) => setTimeout(resolve, 500));
         if (switchToNextModel()) {
           continue;
         }
@@ -439,6 +435,10 @@ async function chatReply(userMessage, history, contextString) {
     };
   }, false);
 }
+
+const CASE_TYPE_KEYWORDS_VIABILITY = {
+  // same structure, no conflict
+};
 
 function normalizeViabilityResult(result) {
   const viabilityScore = Number(result.viabilityScore ?? result.score ?? 0);

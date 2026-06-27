@@ -13,16 +13,17 @@ import EmptyState from '../components/shared/EmptyState';
 import { useChat } from '../hooks/useChat';
 import { useAdvocates } from '../hooks/useAdvocates';
 
-export default function DashboardPage({ session, updateCity, updateBudget, setCaseType, addToast }) {
+export default function DashboardPage({ session, updateCity, updateBudget, setCaseType, addToast, clearSession }) {
   const [activeTab, setActiveTab] = useState('chat');
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showSessionDropdown, setShowSessionDropdown] = useState(false);
 
   const {
     messages,
     isLoading: chatLoading,
     sendMessage,
     detectedCase
-  } = useChat(session.sessionId);
+  } = useChat(session.sessionId, clearSession);
 
   const activeCaseType = session.caseType || detectedCase;
 
@@ -74,7 +75,6 @@ export default function DashboardPage({ session, updateCity, updateBudget, setCa
     const scoreB = b.trustScore ?? 0;
     return scoreB - scoreA;
   });
-  const topAdvocates = sortedAdvocates.slice(0, 3);
 
   const getChatHistorySummary = () => {
     return messages
@@ -157,25 +157,57 @@ export default function DashboardPage({ session, updateCity, updateBudget, setCa
   const menuItems = [
     { id: 'chat', label: 'Chat' },
     { id: 'advocates', label: 'Advocates' },
-    { id: 'viability', label: 'Case Viability' },
     { id: 'advice', label: 'Advice Check' },
     { id: 'documents', label: 'Documents' },
-    { id: 'casefile', label: 'Case File' },
-    { id: 'leaderboard', label: 'Leaderboard' }
+    { id: 'casefile', label: 'Case File' }
   ];
 
   return (
     <div className="dashboard-page">
       <header className="dashboard-header-bar">
-        <button
-          className="mobile-menu-btn"
-          onClick={() => setShowMobileSidebar(true)}
-        >
-          ☰ Menu
-        </button>
-        <div className="dashboard-logo">
-          <span className="logo-icon">⚖</span>
-          <span className="logo-text">LegalLink</span>
+        <div className="dashboard-header-left">
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setShowMobileSidebar(true)}
+          >
+            ☰ Menu
+          </button>
+          <div className="dashboard-logo">
+            <span className="logo-icon">⚖</span>
+            <span className="logo-text">LegalLink</span>
+          </div>
+        </div>
+
+        <div className="dashboard-header-right">
+          <div className="session-dropdown-container">
+            <button
+              className={`session-dropdown-trigger ${showSessionDropdown ? 'active' : ''}`}
+              onClick={() => setShowSessionDropdown(!showSessionDropdown)}
+            >
+              <div className="session-trigger-avatar">U</div>
+              <div className="session-trigger-info">
+                <span className="session-trigger-label">Your Session</span>
+                <span className="session-trigger-value">
+                  {session.city || 'Select City'} • ₹{session.budget?.toLocaleString('en-IN') || '0'}
+                </span>
+              </div>
+              <span className="session-trigger-arrow">▼</span>
+            </button>
+
+            {showSessionDropdown && (
+              <>
+                <div className="session-dropdown-backdrop" onClick={() => setShowSessionDropdown(false)} />
+                <div className="session-dropdown-menu">
+                  <SessionPanel
+                    session={session}
+                    onCityChange={handleCityChange}
+                    onBudgetChange={handleBudgetChange}
+                    onRestartSession={clearSession}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -187,12 +219,6 @@ export default function DashboardPage({ session, updateCity, updateBudget, setCa
               ×
             </button>
           </div>
-
-          <SessionPanel
-            session={session}
-            onCityChange={handleCityChange}
-            onBudgetChange={handleBudgetChange}
-          />
 
           <nav className="sidebar-nav">
             {menuItems.map((item) => (
@@ -217,27 +243,6 @@ export default function DashboardPage({ session, updateCity, updateBudget, setCa
         <main className="dashboard-main-content">
           {renderActiveSection()}
         </main>
-
-        <aside className="dashboard-right-panel">
-          <h3 className="right-panel-heading">Matching Advocates</h3>
-          <div className="right-panel-list">
-            {advocatesLoading ? (
-              <div className="right-panel-loading"><Spinner size={24} /></div>
-            ) : topAdvocates.length === 0 ? (
-              <div className="right-panel-empty">No matching advocates found.</div>
-            ) : (
-              topAdvocates.map((adv, idx) => (
-                <AdvocateCard
-                  key={adv._id || adv.id || idx}
-                  advocate={adv}
-                  userBudget={session.budget}
-                  compact={true}
-                  animationDelay={idx * 100}
-                />
-              ))
-            )}
-          </div>
-        </aside>
       </div>
     </div>
   );
