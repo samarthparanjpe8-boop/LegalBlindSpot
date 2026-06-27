@@ -2,9 +2,11 @@ import { Link } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import Badge from '../components/shared/Badge';
 import heroBg from "../assets/landing_page_pic.jpg";
+import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage() {
   const observerRef = useRef(null);
+  const { user, logout, isAuthenticated } = useAuth();
 
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
@@ -47,7 +49,7 @@ export default function LandingPage() {
         </div>
         <div className="hero-overlay" aria-hidden="true"></div>
 
-        <nav className="landing-nav">
+        <nav className="landing-nav" style={{ justifyContent: 'space-between' }}>
           <div className="landing-logo">
             <span className="logo-icon">⚖</span>
             <span className="logo-text">LegalLink</span>
@@ -58,9 +60,36 @@ export default function LandingPage() {
             <a href="#process" className="nav-link-item">How It Works</a>
             <a href="#trust" className="nav-link-item">Trust</a>
           </div>
-          <Link to="/onboarding" className="nav-cta-btn">
-            Get Started
-          </Link>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {isAuthenticated ? (
+              <>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user?.email}</span>
+                <Link to={user?.role === 'lawyer' ? '/lawyer' : '/dashboard'} className="nav-cta-btn" style={{ padding: '8px 16px' }}>
+                  Portal
+                </Link>
+                <button onClick={logout} style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: 'var(--text-primary)',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" style={{ color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.95rem' }}>
+                  Log In
+                </Link>
+                <Link to="/signup" className="nav-cta-btn" style={{ padding: '8px 16px' }}>
+                  Sign Up
+                </Link>
+              </>
+            )}
+          </div>
         </nav>
 
         <header className="landing-hero">
@@ -70,14 +99,27 @@ export default function LandingPage() {
           <p className="hero-subheadline">
             Find verified advocates, assess your case, and understand your rights — for free, in plain language.
           </p>
-          <div className="hero-actions">
-            <Link to="/onboarding" className="hero-cta-btn">
-              Start for Free
-              <span className="btn-arrow">→</span>
-            </Link>
+          <div className="hero-actions" style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+            {isAuthenticated ? (
+              <Link to={user?.role === 'lawyer' ? '/lawyer' : '/dashboard'} className="hero-cta-btn">
+                Go to Dashboard
+                <span className="btn-arrow">→</span>
+              </Link>
+            ) : (
+              <>
+                <Link to="/onboarding" className="hero-cta-btn">
+                  Start Case Assessment
+                  <span className="btn-arrow">→</span>
+                </Link>
+                <Link to="/login" className="hero-cta-btn" style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-primary)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                  Lawyer Portal
+                </Link>
+              </>
+            )}
           </div>
         </header>
       </div>
+
 
       {/* ── Quick Feature Strip (visible before scroll) ── */}
       <div className="hero-feature-strip">

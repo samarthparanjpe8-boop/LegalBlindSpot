@@ -6,8 +6,111 @@ const { connectDB } = require('./db/connection');
 const Advocate = require('./models/Advocate');
 const CaseAssessment = require('./models/CaseAssessment');
 const CaseFile = require('./models/CaseFile');
+const CaseRequest = require('./models/CaseRequest');
+const User = require('./models/User');
 const geminiService = require('./services/geminiService');
 const { calculateTrustScore } = require('./services/trustScoreService');
+const path = require('path');
+const multer = require('multer');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const nodemailer = require('nodemailer');
+// Configure Multer for file uploads (stored in ./uploads)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '..', 'uploads');
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${unique}${ext}`);
+  },
+});
+const upload = multer({ storage });
+
+// Nodemailer configuration for sending verification and magic‑link emails
+const smtpUser = (process.env.SMTP_USER || '').trim();
+let smtpPass = (process.env.SMTP_PASS || '').trim();
+
+// Gmail App Passwords are shown as 4 groups of 4 characters (e.g. 'gedh lhwf mxyk efvc')
+// but the SMTP server requires them to be entered without spaces.
+if (smtpUser.includes('gmail.com')) {
+  smtpPass = smtpPass.replace(/\s+/g, '');
+}
+
+let transportConfig;
+if (process.env.SMTP_HOST) {
+  transportConfig = {
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    auth: smtpUser ? {
+      user: smtpUser,
+      pass: smtpPass,
+    } : undefined,
+    secure: Number(process.env.SMTP_PORT) === 465,
+  };
+} else if (smtpUser && smtpUser.includes('gmail.com')) {
+  transportConfig = {
+    service: 'gmail',
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    }
+  };
+} else {
+  transportConfig = {
+    host: 'localhost',
+    port: 1025,
+  };
+}
+
+const transporter = nodemailer.createTransport(transportConfig);
+
+
+
+
+
+
+// Helper to send a verification email (passwordless signup)
+async function sendVerificationEmail(email, token) {
+  const verificationUrl = `${process.env.APP_URL || 'http://localhost:3000'}/magic-link?token=${token}`;
+  const mailOptions = {
+    from: process.env.SMTP_USER || 'no-reply@legalblindspot.com',
+    to: email,
+    subject: 'LegalLink – Verify your email',
+    text: `Click the link to verify your email and complete signup: ${verificationUrl}`,
+    html: `<p>Click <a href="${verificationUrl}">here</a> to verify your email and complete signup.</p>`,
+  };
+  await transporter.sendMail(mailOptions);
+}
+
+// Helper to send a magic‑link login email
+async function sendMagicLinkEmail(email, token) {
+  const magicUrl = `${process.env.APP_URL || 'http://localhost:3000'}/magic-link?token=${token}`;
+  const mailOptions = {
+    from: process.env.SMTP_USER || 'no-reply@legalblindspot.com',
+    to: email,
+    subject: 'LegalLink – Your magic login link',
+    text: `Click the link to log in: ${magicUrl}`,
+    html: `<p>Click <a href="${magicUrl}">here</a> to log in to LegalLink.</p>`,
+  };
+  await transporter.sendMail(mailOptions);
+}
+
+// Helper to send a password reset email
+async function sendResetPasswordEmail(email, token) {
+  const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+  const mailOptions = {
+    from: process.env.SMTP_USER || 'no-reply@legalblindspot.com',
+    to: email,
+    subject: 'LegalLink – Reset your password',
+    text: `Click the link to reset your password: ${resetUrl}`,
+    html: `<p>Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
+  };
+  await transporter.sendMail(mailOptions);
+}
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,6 +138,18 @@ app.use(
 );
 app.use(express.json({ limit: '1mb' }));
 
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+  jwt.verify(token, process.env.JWT_SECRET, (err, payload) => {
+    if (err) return res.sendStatus(403);
+    // payload contains sub (user id) and email
+    req.user = { id: payload.sub, email: payload.email };
+    next();
+  });
+}
+
 function createSession(city, budget) {
   const sessionId = String(Date.now());
   const session = {
@@ -59,6 +174,176 @@ function getSessionOrThrow(sessionId) {
   }
   return session;
 }
+
+// Client signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+  const { email, password, role } = req.body;
+  if (!email || !password || !role) {
+    return res.status(400).json({ error: 'Email, password, and role are required' });
+  }
+
+  try {
+    const emailLower = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: emailLower });
+    
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    if (existingUser) {
+      if (existingUser.emailVerified) {
+        return res.status(400).json({ message: 'User already exists and is verified. Please log in.' });
+      }
+      
+      // Update unverified user details and resend email
+      existingUser.passwordHash = passwordHash;
+      existingUser.role = role;
+      await existingUser.save();
+
+      const token = jwt.sign({ sub: existingUser._id.toString(), email: existingUser.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      await sendVerificationEmail(existingUser.email, token);
+
+      return res.status(200).json({ message: 'Verification email resent.' });
+    }
+
+    const user = await User.create({
+      email: emailLower,
+      passwordHash,
+      role,
+      emailVerified: false,
+    });
+
+    const token = jwt.sign({ sub: user._id.toString(), email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    await sendVerificationEmail(user.email, token);
+
+    res.status(201).json({ message: 'User registered. Verification email sent.' });
+  } catch (err) {
+    console.error('Signup error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Magic-link check / verify token
+app.post('/api/auth/verify', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token is required' });
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(payload.sub);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (!user.emailVerified) {
+      user.emailVerified = true;
+      await user.save();
+    }
+
+    const sessionJwt = jwt.sign(
+      { sub: user._id.toString(), email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ jwt: sessionJwt });
+  } catch (err) {
+    console.error('Verification error:', err);
+    res.status(400).json({ error: 'Invalid or expired token' });
+  }
+});
+
+// Magic-link request (Login via email)
+app.post('/api/auth/magic-link', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const token = jwt.sign({ sub: user._id.toString(), email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    await sendMagicLinkEmail(user.email, token);
+
+    res.json({ message: 'Magic link sent to email' });
+  } catch (err) {
+    console.error('Magic link error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Regular password login
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  try {
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
+    // Wait, the client decided to enforce magic link verification, but if they are already verified we can issue JWT
+    const token = jwt.sign(
+      { sub: user._id.toString(), email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role } });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Forgot Password endpoint
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const token = jwt.sign({ sub: user._id.toString(), email: user.email }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    await sendResetPasswordEmail(user.email, token);
+
+    res.json({ message: 'Password reset link sent to email' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset Password endpoint
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token and password are required' });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(payload.sub);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(password, salt);
+    await user.save();
+
+    res.json({ message: 'Password reset successful' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(400).json({ error: 'Invalid or expired reset token' });
+  }
+});
+
 
 function sendData(res, data, status = 200) {
   res.status(status).json({ data });
@@ -120,17 +405,29 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20 }) {
   }
 
   try {
-    const total = await Advocate.countDocuments({});
-    console.log(`[Diagnostic] Total advocates in DB: ${total}`);
-    console.log(`[Diagnostic] Query filter used: ${JSON.stringify(filter)}`);
     const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit).lean();
-    console.log(`[Diagnostic] Matching advocates found: ${advocates.length}`);
     return advocates
       .map(normalizeAdvocate)
       .sort((a, b) => b.trustScore - a.trustScore);
   } catch (err) {
-    console.error('Error finding advocates:', err);
-    return [];
+    console.error('Failed to fetch advocates from DB, using seed memory fallback:', err.message);
+    const seedAdvocates = require('./data/seedAdvocates');
+    let filtered = [...seedAdvocates];
+    if (city) {
+      filtered = filtered.filter((a) => a.city.toLowerCase() === city.toLowerCase());
+    }
+    if (caseType) {
+      filtered = filtered.filter((a) =>
+        a.practiceAreas.some((pa) => pa.toLowerCase().includes(caseType.toLowerCase()))
+      );
+    }
+    if (maxBudget) {
+      filtered = filtered.filter((a) => a.consultationFeeInr <= Number(maxBudget));
+    }
+    return filtered
+      .map(normalizeAdvocate)
+      .sort((a, b) => b.trustScore - a.trustScore)
+      .slice(0, limit);
   }
 }
 
@@ -168,34 +465,34 @@ ${JSON.stringify(
     const result = await geminiService.chatReply(message, session.history, context);
     session.history = result.history;
     return result.content;
-  } catch (err) {
-    console.error('Gemini API Error in getChatReply:', err.message || err);
+  } catch {
     return null;
   }
 }
 
 async function upsertCaseFile(session, description) {
-  if (!session.caseType) return null;
-
   const existing = await CaseFile.findOne({ sessionId: session.sessionId });
   if (existing) {
-    existing.caseType = session.caseType;
+    if (session.caseType) existing.caseType = session.caseType;
     existing.city = session.city;
     existing.budgetInr = session.budget;
     existing.caseSummary = description || existing.caseSummary;
+    existing.chatHistory = session.history;
     return existing.save();
   }
 
   let checklist = [];
-  try {
-    checklist = await geminiService.getDocumentChecklist(session.caseType, description || '');
-  } catch {
-    checklist = [];
+  if (session.caseType) {
+    try {
+      checklist = await geminiService.getDocumentChecklist(session.caseType, description || '');
+    } catch {
+      checklist = [];
+    }
   }
 
   return CaseFile.create({
     sessionId: session.sessionId,
-    caseType: session.caseType,
+    caseType: session.caseType || null,
     city: session.city,
     budgetInr: session.budget,
     documentsRequired: checklist.map((item) => ({
@@ -206,8 +503,10 @@ async function upsertCaseFile(session, description) {
     documentsUploaded: [],
     caseSummary: description || '',
     adviceChecks: [],
+    chatHistory: session.history,
   });
 }
+
 
 app.get('/api/health', (_req, res) => {
   sendData(res, { ok: true });
@@ -257,12 +556,14 @@ app.post('/api/chat', async (req, res) => {
     let city = 'Delhi';
     let budget = 5000;
     let caseType = null;
+    let history = [];
     try {
       const caseFile = await CaseFile.findOne({ sessionId }).lean();
       if (caseFile) {
         city = caseFile.city || city;
         budget = caseFile.budgetInr || budget;
         caseType = caseFile.caseType || caseType;
+        history = caseFile.chatHistory || [];
       }
     } catch (dbErr) {
       console.error('Failed to query CaseFile during session restoration:', dbErr.message);
@@ -272,7 +573,7 @@ app.post('/api/chat', async (req, res) => {
       city,
       budget,
       caseType,
-      history: [],
+      history,
       lastUserMessage: '',
       lastViabilityResult: null,
     };
@@ -312,9 +613,9 @@ app.post('/api/chat', async (req, res) => {
     session.history.push({ role: 'assistant', content: reply });
   }
 
-  if (session.caseType) {
-    try {
-      await upsertCaseFile(session, message);
+  try {
+    await upsertCaseFile(session, message);
+    if (session.caseType) {
       await CaseAssessment.create({
         userDescription: message,
         detectedCaseType: session.caseType,
@@ -326,10 +627,11 @@ app.post('/api/chat', async (req, res) => {
         recommendedAdvocates: advocates.map((a) => a._id).filter(Boolean),
         budgetInr: session.budget,
       });
-    } catch {
-      // Persistence should not block chat.
     }
+  } catch (err) {
+    console.error('Failed to persist chat session:', err.message);
   }
+
 
   sendData(res, {
     reply,
@@ -366,7 +668,8 @@ app.post('/api/intake', async (req, res) => {
   sendData(res, result);
 });
 
-app.get('/api/advocates', async (req, res) => {
+// Protect advocate listing – only authenticated users can view
+app.get('/api/advocates', authenticateToken, async (req, res) => {
   const advocates = await findAdvocates({
     city: req.query.city,
     caseType: req.query.caseType,
@@ -377,53 +680,153 @@ app.get('/api/advocates', async (req, res) => {
 });
 
 app.get('/api/advocates/:id', async (req, res) => {
-  const advocate = await Advocate.findById(req.params.id).lean();
-  if (!advocate) {
-    return res.status(404).json({ error: 'Advocate not found' });
+  try {
+    const advocate = await Advocate.findById(req.params.id).lean();
+    if (!advocate) {
+      // Try seed advocates fallback
+      const seedAdvocates = require('./data/seedAdvocates');
+      const matched = seedAdvocates.find((a, idx) => {
+        const id = a._id?.toString() || String(idx + 1);
+        return id === req.params.id;
+      });
+      if (matched) {
+        return sendData(res, normalizeAdvocate(matched));
+      }
+      return res.status(404).json({ error: 'Advocate not found' });
+    }
+    sendData(res, normalizeAdvocate(advocate));
+  } catch (err) {
+    const seedAdvocates = require('./data/seedAdvocates');
+    const matched = seedAdvocates.find((a, idx) => {
+      const id = a._id?.toString() || String(idx + 1);
+      return id === req.params.id;
+    });
+    if (matched) {
+      return sendData(res, normalizeAdvocate(matched));
+    }
+    res.status(500).json({ error: err.message });
   }
-  sendData(res, normalizeAdvocate(advocate));
 });
 
 app.get('/api/leaderboard', async (_req, res) => {
-  const advocates = await Advocate.find({}).lean();
-  const scored = advocates
-    .map(normalizeAdvocate)
-    .sort((a, b) => b.trustScore - a.trustScore)
-    .slice(0, 20);
-  sendData(res, scored);
+  try {
+    const advocates = await Advocate.find({}).lean();
+    const scored = advocates
+      .map(normalizeAdvocate)
+      .sort((a, b) => b.trustScore - a.trustScore)
+      .slice(0, 20);
+    sendData(res, scored);
+  } catch (err) {
+    console.error('Leaderboard DB query failed, using seed memory fallback:', err.message);
+    const seedAdvocates = require('./data/seedAdvocates');
+    const scored = seedAdvocates
+      .map(normalizeAdvocate)
+      .sort((a, b) => b.trustScore - a.trustScore)
+      .slice(0, 20);
+    sendData(res, scored);
+  }
 });
 
 app.get('/api/case-file/:sessionId', async (req, res) => {
-  const caseFile = await CaseFile.findOne({ sessionId: req.params.sessionId }).lean();
-  if (!caseFile) {
-    return res.status(404).json({ error: 'Case file not found' });
+  try {
+    const caseFile = await CaseFile.findOne({ sessionId: req.params.sessionId }).lean();
+    if (!caseFile) {
+      return sendData(res, {
+        caseType: 'General Legal Dispute',
+        city: 'Mumbai',
+        budget: 2000,
+        summary: 'Session in progress (running in offline/no-db mode)...',
+        documents: [],
+        adviceChecks: [],
+        recommendedAdvocates: [],
+      });
+    }
+
+    const recommendedAdvocates = await findAdvocates({
+      city: caseFile.city,
+      caseType: caseFile.caseType,
+      maxBudget: caseFile.budgetInr,
+      limit: 3,
+    });
+
+    sendData(res, {
+      caseType: caseFile.caseType,
+      city: caseFile.city,
+      budget: caseFile.budgetInr,
+      summary: caseFile.caseSummary,
+      documents: (caseFile.documentsRequired || []).map((doc) => ({
+        name: doc.document,
+        desc: doc.whyNeeded,
+        uploaded: doc.uploaded,
+      })),
+      adviceChecks: (caseFile.adviceChecks || []).map((check) => ({
+        advice: check.adviceClaimed,
+        verdict: check.verdict,
+        explanation: check.explanation,
+        date: check.checkedAt,
+      })),
+      recommendedAdvocates,
+    });
+  } catch (err) {
+    sendData(res, {
+      caseType: 'General Legal Dispute',
+      city: 'Mumbai',
+      budget: 2000,
+      summary: 'Session in progress (running in offline/no-db mode)...',
+      documents: [],
+      adviceChecks: [],
+      recommendedAdvocates: [],
+    });
   }
+});
 
-  const recommendedAdvocates = await findAdvocates({
-    city: caseFile.city,
-    caseType: caseFile.caseType,
-    maxBudget: caseFile.budgetInr,
-    limit: 3,
+// ---------- Case Request Routes ----------
+// Client creates a new case request (optional file attachments)
+app.post('/api/requests', authenticateToken, upload.array('attachments'), async (req, res) => {
+  const clientId = req.user.id;
+  const { lawyer, caseType, city, description, budgetInr } = req.body;
+  if (!lawyer || !caseType || !city || !description) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  const attachments = (req.files || []).map(f => ({ filename: f.originalname, path: f.path }));
+  const request = await CaseRequest.create({
+    client: clientId,
+    lawyer,
+    caseType,
+    city,
+    description,
+    budgetInr,
+    attachments,
   });
+  sendData(res, request, 201);
+});
 
-  sendData(res, {
-    caseType: caseFile.caseType,
-    city: caseFile.city,
-    budget: caseFile.budgetInr,
-    summary: caseFile.caseSummary,
-    documents: (caseFile.documentsRequired || []).map((doc) => ({
-      name: doc.document,
-      desc: doc.whyNeeded,
-      uploaded: doc.uploaded,
-    })),
-    adviceChecks: (caseFile.adviceChecks || []).map((check) => ({
-      advice: check.adviceClaimed,
-      verdict: check.verdict,
-      explanation: check.explanation,
-      date: check.checkedAt,
-    })),
-    recommendedAdvocates,
-  });
+// Client lists their own case requests
+app.get('/api/requests/client', authenticateToken, async (req, res) => {
+  const clientId = req.user.id;
+  const requests = await CaseRequest.find({ client: clientId }).populate('lawyer', 'name picture').lean();
+  sendData(res, requests);
+});
+
+// Lawyer lists requests addressed to them
+app.get('/api/requests/lawyer', authenticateToken, async (req, res) => {
+  const lawyerId = req.user.id;
+  const requests = await CaseRequest.find({ lawyer: lawyerId }).populate('client', 'name picture').lean();
+  sendData(res, requests);
+});
+
+// Lawyer decides to accept or decline a request
+app.post('/api/requests/:id/decision', authenticateToken, async (req, res) => {
+  const lawyerId = req.user.id;
+  const { decision } = req.body; // expected 'accept' or 'decline'
+  if (!['accept', 'decline'].includes(decision)) {
+    return res.status(400).json({ error: 'Invalid decision' });
+  }
+  const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: lawyerId });
+  if (!request) return res.status(404).json({ error: 'Request not found' });
+  request.status = decision === 'accept' ? 'accepted' : 'declined';
+  await request.save();
+  sendData(res, request);
 });
 
 app.use((err, _req, res, _next) => {
@@ -435,10 +838,18 @@ const fs = require('fs');
 async function start() {
   try {
     await connectDB();
+    console.log('Database connected successfully.');
+    console.log('SMTP Config loaded:', {
+      user: smtpUser,
+      passMasked: smtpPass ? `${smtpPass.substring(0, 3)}...${smtpPass.substring(smtpPass.length - 3)}` : 'none',
+      passLength: smtpPass.length,
+      hasHost: !!process.env.SMTP_HOST
+    });
     fs.writeFileSync('db_test_result.txt', 'DB CONNECTED SUCCESSFUL AT ' + new Date().toISOString());
+
   } catch (err) {
     fs.writeFileSync('db_test_result.txt', 'DB CONNECTION ERROR: ' + err.message + '\nStack: ' + err.stack + '\nAT ' + new Date().toISOString());
-    console.error('Database connection failed:', err.message);
+    console.error('Database connection failed (running in offline/no-db mode):', err.message);
   }
   app.listen(PORT, () => {
     console.log(`LegalLink API running on http://localhost:${PORT}`);

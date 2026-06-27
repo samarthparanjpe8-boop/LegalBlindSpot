@@ -29,7 +29,15 @@ const caseFileSchema = new mongoose.Schema({
   documentsUploaded: [String],
   caseSummary: String,
   adviceChecks: [adviceCheckSchema],
+  chatHistory: [
+    {
+      role: { type: String, required: true },
+      content: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+    }
+  ],
   createdAt: { type: Date, default: Date.now },
 });
 
 module.exports = mongoose.model('CaseFile', caseFileSchema);
+
