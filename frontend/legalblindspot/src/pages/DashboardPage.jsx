@@ -51,17 +51,19 @@ export default function DashboardPage({
     intakeComplete,
     limitReached,
     messagesRemaining,
+    cooldownActive,
+    clearHistory,
   } = useChat(session.sessionId, user?.id);
 
   const activeCaseType = session.caseType || detectedCase;
 
-  const advocateCity = session.city || user?.city || null;
+  const advocateCity = (session.city || user?.city || '').trim() || null;
 
   const {
     advocates,
     isLoading: advocatesLoading,
     error: advocatesError,
-  } = useAdvocates(advocateCity, activeCaseType, session.budget, Boolean(advocateCity));
+  } = useAdvocates(advocateCity, null, null, Boolean(advocateCity));
 
   useEffect(() => {
     if (!session.sessionId && activeTab === 'documents') {
@@ -140,6 +142,7 @@ export default function DashboardPage({
 
   const handleSelectHistorySession = async (sessionId) => {
     try {
+      clearHistory();
       await switchSession(sessionId);
       setActiveTab('chat');
       addToast('Session loaded from history', 'info');
@@ -269,6 +272,7 @@ export default function DashboardPage({
           intakeComplete={intakeComplete}
           limitReached={limitReached}
           messagesRemaining={messagesRemaining}
+          cooldownActive={cooldownActive}
         />
       );
     }
@@ -335,7 +339,7 @@ export default function DashboardPage({
                     </div>
                   </div>
 
-                  {session.sessionId && (
+                  {session.sessionId ? (
                     <div className="profile-dropdown-session">
                       <SessionPanel
                         session={session}
@@ -344,16 +348,16 @@ export default function DashboardPage({
                         onLogout={handleLogoutClick}
                       />
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="profile-logout-btn"
+                      onClick={handleLogoutClick}
+                    >
+                      <LogOut size={16} />
+                      Log out
+                    </button>
                   )}
-
-                  <button
-                    type="button"
-                    className="profile-logout-btn"
-                    onClick={handleLogoutClick}
-                  >
-                    <LogOut size={16} />
-                    Log out
-                  </button>
                 </div>
               </>
             )}

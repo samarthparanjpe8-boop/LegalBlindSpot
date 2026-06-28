@@ -195,6 +195,38 @@ function getSessionOrThrow(sessionId) {
   return session;
 }
 
+function normalizeHistoryEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .filter((entry) => entry && (entry.role === 'user' || entry.role === 'assistant') && typeof entry.content === 'string')
+    .map((entry) => ({ role: entry.role, content: entry.content }));
+}
+
+function pickLongestHistory(...candidates) {
+  return candidates.reduce((best, current) => {
+    const normalized = normalizeHistoryEntries(current);
+    return normalized.length > best.length ? normalized : best;
+  }, []);
+}
+
+async function hydrateSessionFromDb(session, clientHistory) {
+  let dbHistory = [];
+  try {
+    const caseFile = await CaseFile.findOne({ sessionId: session.sessionId }).lean();
+    if (caseFile) {
+      dbHistory = caseFile.chatHistory || [];
+      if (caseFile.city) session.city = caseFile.city;
+      if (caseFile.budgetInr != null) session.budget = caseFile.budgetInr;
+      if (caseFile.caseType) session.caseType = caseFile.caseType;
+    }
+  } catch (err) {
+    console.error('Failed to hydrate session from CaseFile:', err.message);
+  }
+
+  session.history = pickLongestHistory(session.history, dbHistory, clientHistory);
+  return session;
+}
+
 // Client signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   const { name, email, password, role, city, gender, maxActiveClients } = req.body;
@@ -398,6 +430,22 @@ function sendData(res, data, status = 200) {
   res.status(status).json({ data });
 }
 
+const KNOWN_CITIES = [
+  'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata', 'Nagpur',
+];
+
+function normalizeCityInput(city) {
+  if (!city || typeof city !== 'string') return null;
+  const trimmed = city.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return null;
+  const match = KNOWN_CITIES.find((c) => c.toLowerCase() === trimmed.toLowerCase());
+  return match || trimmed;
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function normalizeAdvocate(advocate) {
   const trustResult = calculateTrustScore(advocate);
 
@@ -441,10 +489,11 @@ function normalizeViability(result) {
 }
 
 async function findAdvocates({ city, caseType, maxBudget, limit = 20, includeUnavailable = false }) {
+  const normalizedCity = normalizeCityInput(city);
   const filter = {};
 
-  if (city) {
-    filter.city = { $regex: new RegExp(`^${city}$`, 'i') };
+  if (normalizedCity) {
+    filter.city = { $regex: new RegExp(`^${escapeRegex(normalizedCity)}$`, 'i') };
   }
   if (caseType) {
     filter.practiceAreas = { $regex: caseType, $options: 'i' };
@@ -453,22 +502,13 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20, includeUna
     filter.consultationFeeInr = { $lte: Number(maxBudget) };
   }
 
-  try {
-    const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit * 2).lean();
-    const enriched = await Promise.all(
-      advocates.map((adv) => enrichAdvocateWithCapacity(adv, normalizeAdvocate))
-    );
-    const sorted = enriched.sort((a, b) => b.trustScore - a.trustScore);
-    const filtered = includeUnavailable
-      ? sorted
-      : sorted.filter((adv) => adv.canReceiveRequests !== false);
-    return filtered.slice(0, limit);
-  } catch (err) {
-    console.error('Failed to fetch advocates from DB, using seed memory fallback:', err.message);
+  const applySeedFallback = () => {
     const seedAdvocates = require('./data/seedAdvocates');
     let filtered = [...seedAdvocates];
-    if (city) {
-      filtered = filtered.filter((a) => a.city.toLowerCase() === city.toLowerCase());
+    if (normalizedCity) {
+      filtered = filtered.filter(
+        (a) => normalizeCityInput(a.city)?.toLowerCase() === normalizedCity.toLowerCase()
+      );
     }
     if (caseType) {
       filtered = filtered.filter((a) =>
@@ -483,6 +523,89 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20, includeUna
       .map((adv) => ({ ...adv, canReceiveRequests: false, acceptingClients: false, availableSlots: 0 }))
       .sort((a, b) => b.trustScore - a.trustScore)
       .slice(0, limit);
+  };
+
+  try {
+    const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit * 2).lean();
+    if (!advocates.length) {
+      return applySeedFallback();
+    }
+
+    const enrichedResults = await Promise.allSettled(
+      advocates.map((adv) => enrichAdvocateWithCapacity(adv, normalizeAdvocate))
+    );
+    const enriched = enrichedResults
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
+
+    if (!enriched.length) {
+      return applySeedFallback();
+    }
+
+    const sorted = enriched.sort((a, b) => b.trustScore - a.trustScore);
+    const filtered = includeUnavailable
+      ? sorted
+      : sorted.filter((adv) => adv.canReceiveRequests !== false);
+    if (!filtered.length) {
+      return applySeedFallback();
+    }
+    return filtered.slice(0, limit);
+  } catch (err) {
+    console.error('Failed to fetch advocates from DB, using seed memory fallback:', err.message);
+    return applySeedFallback();
+  }
+}
+
+async function listCityAdvocatesForBrowse(city, limit = 50) {
+  const normalizedCity = normalizeCityInput(city);
+  if (!normalizedCity) return [];
+
+  const seedResults = (() => {
+    const seedAdvocates = require('./data/seedAdvocates');
+    return seedAdvocates
+      .filter((a) => normalizeCityInput(a.city)?.toLowerCase() === normalizedCity.toLowerCase())
+      .map(normalizeAdvocate)
+      .map((adv) => ({
+        ...adv,
+        canReceiveRequests: adv.canReceiveRequests ?? false,
+        acceptingClients: adv.acceptingClients ?? false,
+        availableSlots: adv.availableSlots ?? 0,
+      }))
+      .sort((a, b) => b.trustScore - a.trustScore);
+  })();
+
+  try {
+    const dbAdvocates = await Advocate.find({
+      city: { $regex: new RegExp(`^${escapeRegex(normalizedCity)}$`, 'i') },
+    })
+      .sort({ ratingAvg: -1 })
+      .limit(limit)
+      .lean();
+
+    if (!dbAdvocates.length) {
+      return seedResults.slice(0, limit);
+    }
+
+    const enrichedResults = await Promise.allSettled(
+      dbAdvocates.map((adv) => enrichAdvocateWithCapacity(adv, normalizeAdvocate))
+    );
+    const fromDb = enrichedResults
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
+
+    if (!fromDb.length) {
+      return seedResults.slice(0, limit);
+    }
+
+    const seen = new Set(fromDb.map((a) => a.barRegistration || a.barRegistrationNo || a.email));
+    const merged = [
+      ...fromDb,
+      ...seedResults.filter((s) => !seen.has(s.barRegistration || s.barRegistrationNo || s.email)),
+    ];
+    return merged.slice(0, limit);
+  } catch (err) {
+    console.error('listCityAdvocatesForBrowse failed:', err.message);
+    return seedResults.slice(0, limit);
   }
 }
 
@@ -515,6 +638,12 @@ async function getChatReply(message, session, advocates, detection) {
   contextParts.push(
     'Follow the intake phase. In intro: ask what happened, when, and who is involved. In evidence: ask for documents and proof. In solution: cite IPC/BNS sections, penalties, jail time, next steps, and 2-3 follow-up questions.'
   );
+
+  if ((session.history || []).length > 0) {
+    contextParts.push(
+      'IMPORTANT: This is a resumed consultation with prior messages in the conversation history. Continue from where the user left off. Do not restart intake or ask questions they already answered unless you need a quick clarification.'
+    );
+  }
 
   try {
     const result = await geminiService.chatReply(message, session.history, contextParts.join('\n'));
@@ -604,31 +733,32 @@ app.post('/api/session', (req, res) => {
 app.get('/api/session/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
   let session = sessions.get(sessionId);
+  let caseFile = null;
 
-  if (!session) {
-    try {
-      const caseFile = await CaseFile.findOne({ sessionId }).lean();
-      if (caseFile) {
-        session = {
-          sessionId,
-          city: caseFile.city,
-          budget: caseFile.budgetInr,
-          caseType: caseFile.caseType || null,
-          history: caseFile.chatHistory || [],
-          lastUserMessage: '',
-          lastViabilityResult: null,
-        };
-        sessions.set(sessionId, session);
-      }
-    } catch (err) {
-      console.error('Failed to restore session from CaseFile:', err.message);
-    }
+  try {
+    caseFile = await CaseFile.findOne({ sessionId }).lean();
+  } catch (err) {
+    console.error('Failed to restore session from CaseFile:', err.message);
   }
 
-  if (!session) {
+  if (!session && !caseFile) {
     return res.status(404).json({ error: 'Session not found' });
   }
 
+  if (!session) {
+    session = {
+      sessionId,
+      city: caseFile?.city || null,
+      budget: caseFile?.budgetInr ?? null,
+      caseType: caseFile?.caseType || null,
+      history: [],
+      lastUserMessage: '',
+      lastViabilityResult: null,
+    };
+  }
+
+  await hydrateSessionFromDb(session);
+  sessions.set(sessionId, session);
   sendData(res, session);
 });
 
@@ -649,7 +779,7 @@ app.post('/api/detect-case', async (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-  const { message, sessionId, userId } = req.body;
+  const { message, sessionId, userId, history: clientHistory } = req.body;
   if (!message || !sessionId) {
     return res.status(400).json({ error: 'Message and sessionId are required' });
   }
@@ -684,6 +814,9 @@ app.post('/api/chat', async (req, res) => {
     };
     sessions.set(sessionId, session);
   }
+
+  await hydrateSessionFromDb(session, clientHistory);
+  sessions.set(sessionId, session);
   session.lastUserMessage = message;
 
   const userMessageCount = chatFlow.countUserMessages(session.history);
@@ -699,16 +832,28 @@ app.post('/api/chat', async (req, res) => {
       intakeComplete: isIntakeComplete(session),
       limitReached: true,
       messagesRemaining: 0,
+      slowdownMs: chatFlow.CHAT_SLOWDOWN_MS,
     });
   }
 
-  const detection = await geminiService.detectCaseAndBudget(message);
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  await sleep(chatFlow.CHAT_SLOWDOWN_MS);
+
+  let detection;
+  if (session.caseType) {
+    detection = geminiService.detectCaseAndBudgetLocally(message);
+    detection.caseType = session.caseType;
+  } else {
+    detection = await geminiService.detectCaseAndBudget(message);
+  }
   if (detection.cityMentioned) session.city = detection.cityMentioned;
   if (detection.budgetMentioned) session.budget = detection.budgetMentioned;
   if (detection.caseType) session.caseType = detection.caseType;
 
+  await sleep(chatFlow.CHAT_SLOWDOWN_MS);
+
   let viability = null;
-  if (session.caseType) {
+  if (session.caseType && userMessageCount >= 2) {
     try {
       viability = normalizeViability(
         await geminiService.assessViability(message, session.caseType, [])
@@ -718,6 +863,8 @@ app.post('/api/chat', async (req, res) => {
       viability = null;
     }
   }
+
+  await sleep(chatFlow.CHAT_SLOWDOWN_MS);
 
   const intakeComplete = isIntakeComplete(session);
 
@@ -774,6 +921,7 @@ app.post('/api/chat', async (req, res) => {
     intakeComplete: intakeCompleteAfter,
     limitReached: messagesRemaining === 0,
     messagesRemaining,
+    slowdownMs: chatFlow.CHAT_SLOWDOWN_MS,
   });
 });
 
@@ -848,13 +996,25 @@ app.post('/api/intake', async (req, res) => {
 
 // Protect advocate listing – only authenticated users can view
 app.get('/api/advocates', authenticateToken, async (req, res) => {
-  const advocates = await findAdvocates({
-    city: req.query.city,
-    caseType: req.query.caseType,
-    maxBudget: req.query.maxBudget,
-    limit: 50,
-  });
-  sendData(res, advocates);
+  try {
+    const city = normalizeCityInput(req.query.city);
+    if (!city) {
+      return res.status(400).json({ error: 'City is required to list advocates' });
+    }
+    const advocates = await listCityAdvocatesForBrowse(city, 50);
+    sendData(res, advocates);
+  } catch (err) {
+    console.error('GET /api/advocates failed:', err.message);
+    const seedAdvocates = require('./data/seedAdvocates');
+    const city = normalizeCityInput(req.query.city);
+    const fallback = city
+      ? seedAdvocates
+          .filter((a) => normalizeCityInput(a.city)?.toLowerCase() === city.toLowerCase())
+          .map(normalizeAdvocate)
+          .slice(0, 50)
+      : [];
+    sendData(res, fallback);
+  }
 });
 
 app.get('/api/advocates/:id', async (req, res) => {

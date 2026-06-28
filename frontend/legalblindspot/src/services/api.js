@@ -77,7 +77,8 @@ export async function runIntake(answers) {
 
 export async function getAdvocates(city, caseType, maxBudget) {
   const params = new URLSearchParams();
-  if (city) params.set('city', city);
+  const normalizedCity = typeof city === 'string' ? city.trim() : city;
+  if (normalizedCity) params.set('city', normalizedCity);
   if (caseType) params.set('caseType', caseType);
   if (maxBudget) params.set('maxBudget', maxBudget);
   return request(`/api/advocates?${params.toString()}`);

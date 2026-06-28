@@ -4450,8 +4450,8 @@ p {
   border-bottom: 1px solid var(--border);
 }
 
-.profile-dropdown-session .session-logout-btn {
-  display: none;
+.profile-dropdown-panel .session-panel-header {
+  display: none !important;
 }
 
 .profile-logout-btn {

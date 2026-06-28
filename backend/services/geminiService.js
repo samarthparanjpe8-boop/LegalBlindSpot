@@ -620,6 +620,7 @@ module.exports = {
   chat,
   chatReply,
   detectCaseAndBudget,
+  detectCaseAndBudgetLocally,
   checkAdvice,
   assessViability,
   runIntake,

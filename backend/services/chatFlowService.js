@@ -1,4 +1,5 @@
-const MAX_USER_MESSAGES = Number(process.env.CHAT_USER_MESSAGE_LIMIT) || 12;
+const MAX_USER_MESSAGES = Number(process.env.CHAT_USER_MESSAGE_LIMIT) || 6;
+const CHAT_SLOWDOWN_MS = Number(process.env.CHAT_SLOWDOWN_MS) || 3000;
 
 const CASE_LEGAL_PROFILES = {
   'Criminal Defense': {
@@ -315,6 +316,7 @@ function isRateLimitError(err) {
 
 module.exports = {
   MAX_USER_MESSAGES,
+  CHAT_SLOWDOWN_MS,
   countUserMessages,
   getIntakePhase,
   isLimitReached,

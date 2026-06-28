@@ -6,21 +6,27 @@ export function useAdvocates(city, caseType, maxBudget, enabled = true) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const normalizedCity = typeof city === 'string' ? city.trim() : city;
+
   const fetchAdvocates = useCallback(async () => {
-    if (!enabled || !city) return;
+    if (!enabled || !normalizedCity) {
+      setAdvocates([]);
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
     try {
-      const data = await api.getAdvocates(city || undefined, caseType || undefined, maxBudget || undefined);
-      setAdvocates(Array.isArray(data) ? data : data.advocates || []);
+      const data = await api.getAdvocates(normalizedCity, caseType || undefined, maxBudget || undefined);
+      const list = Array.isArray(data) ? data : data?.advocates || [];
+      setAdvocates(list);
     } catch (err) {
       setError(err.message);
       setAdvocates([]);
     } finally {
       setIsLoading(false);
     }
-  }, [city, caseType, maxBudget, enabled]);
+  }, [normalizedCity, caseType, maxBudget, enabled]);
 
   useEffect(() => {
     fetchAdvocates();

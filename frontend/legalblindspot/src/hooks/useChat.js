@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import * as api from '../services/api';
 import { getSessionHistory, saveSessionHistory, historyToMessages, computeIntakeComplete } from '../utils/chatHistory';
 
-const DEFAULT_MESSAGE_LIMIT = 12;
+const DEFAULT_MESSAGE_LIMIT = 6;
+const DEFAULT_SLOWDOWN_MS = 3000;
 
 function syncLimitFromMessages(msgs, setLimitReached, setMessagesRemaining) {
   const userCount = msgs.filter((m) => m.role === 'user').length;
@@ -19,8 +20,10 @@ export function useChat(sessionId, userId) {
   const [intakeComplete, setIntakeComplete] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [messagesRemaining, setMessagesRemaining] = useState(DEFAULT_MESSAGE_LIMIT);
+  const [cooldownActive, setCooldownActive] = useState(false);
   const historyRef = useRef([]);
   const loadedSessionRef = useRef(null);
+  const cooldownTimerRef = useRef(null);
 
   const persistHistory = useCallback((msgs, meta = {}) => {
     if (!userId || !sessionId) return;
@@ -97,8 +100,25 @@ export function useChat(sessionId, userId) {
     return () => { cancelled = true; };
   }, [sessionId, userId, persistHistory]);
 
+  const startCooldown = useCallback((ms = DEFAULT_SLOWDOWN_MS) => {
+    if (cooldownTimerRef.current) {
+      clearTimeout(cooldownTimerRef.current);
+    }
+    setCooldownActive(true);
+    cooldownTimerRef.current = setTimeout(() => {
+      setCooldownActive(false);
+      cooldownTimerRef.current = null;
+    }, ms);
+  }, []);
+
+  useEffect(() => () => {
+    if (cooldownTimerRef.current) {
+      clearTimeout(cooldownTimerRef.current);
+    }
+  }, []);
+
   const sendMessage = useCallback(async (text) => {
-    if (!text.trim() || limitReached) return;
+    if (!text.trim() || limitReached || cooldownActive) return;
     setError(null);
 
     const userMsg = {
@@ -147,6 +167,8 @@ export function useChat(sessionId, userId) {
         }
       }
 
+      startCooldown(res.slowdownMs || DEFAULT_SLOWDOWN_MS);
+
       historyRef.current = [...historyRef.current, { role: 'assistant', content: botMsg.content }];
       setMessages(prev => {
         const next = [...prev, botMsg];
@@ -174,7 +196,7 @@ export function useChat(sessionId, userId) {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, userId, persistHistory, detectedCase, intakeComplete, limitReached]);
+  }, [sessionId, userId, persistHistory, detectedCase, intakeComplete, limitReached, cooldownActive, startCooldown]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
@@ -195,6 +217,7 @@ export function useChat(sessionId, userId) {
     intakeComplete,
     limitReached,
     messagesRemaining,
+    cooldownActive,
     sendMessage,
     clearHistory,
   };
