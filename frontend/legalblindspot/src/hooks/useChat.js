@@ -2,12 +2,23 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import * as api from '../services/api';
 import { getSessionHistory, saveSessionHistory, historyToMessages, computeIntakeComplete } from '../utils/chatHistory';
 
+const DEFAULT_MESSAGE_LIMIT = 12;
+
+function syncLimitFromMessages(msgs, setLimitReached, setMessagesRemaining) {
+  const userCount = msgs.filter((m) => m.role === 'user').length;
+  const remaining = Math.max(0, DEFAULT_MESSAGE_LIMIT - userCount);
+  setMessagesRemaining(remaining);
+  setLimitReached(remaining === 0);
+}
+
 export function useChat(sessionId, userId) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [detectedCase, setDetectedCase] = useState(null);
   const [intakeComplete, setIntakeComplete] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+  const [messagesRemaining, setMessagesRemaining] = useState(DEFAULT_MESSAGE_LIMIT);
   const historyRef = useRef([]);
   const loadedSessionRef = useRef(null);
 
@@ -25,6 +36,8 @@ export function useChat(sessionId, userId) {
       historyRef.current = [];
       setDetectedCase(null);
       setIntakeComplete(false);
+      setLimitReached(false);
+      setMessagesRemaining(DEFAULT_MESSAGE_LIMIT);
       loadedSessionRef.current = null;
       return;
     }
@@ -36,6 +49,8 @@ export function useChat(sessionId, userId) {
     historyRef.current = [];
     setDetectedCase(null);
     setIntakeComplete(false);
+    setLimitReached(false);
+    setMessagesRemaining(DEFAULT_MESSAGE_LIMIT);
 
     let cancelled = false;
 
@@ -49,6 +64,7 @@ export function useChat(sessionId, userId) {
           const caseType = local.caseType || null;
           setDetectedCase(caseType);
           setIntakeComplete(local.intakeComplete ?? computeIntakeComplete(msgs, caseType));
+          syncLimitFromMessages(msgs, setLimitReached, setMessagesRemaining);
         }
       }
 
@@ -63,6 +79,7 @@ export function useChat(sessionId, userId) {
           if (caseType) setDetectedCase(caseType);
           const complete = computeIntakeComplete(msgs, caseType);
           setIntakeComplete(complete);
+          syncLimitFromMessages(msgs, setLimitReached, setMessagesRemaining);
           persistHistory(msgs, {
             caseType,
             city: remote.city,
@@ -81,7 +98,7 @@ export function useChat(sessionId, userId) {
   }, [sessionId, userId, persistHistory]);
 
   const sendMessage = useCallback(async (text) => {
-    if (!text.trim()) return;
+    if (!text.trim() || limitReached) return;
     setError(null);
 
     const userMsg = {
@@ -120,6 +137,16 @@ export function useChat(sessionId, userId) {
         setIntakeComplete(true);
       }
 
+      if (res.limitReached) {
+        setLimitReached(true);
+      }
+      if (typeof res.messagesRemaining === 'number') {
+        setMessagesRemaining(res.messagesRemaining);
+        if (res.messagesRemaining === 0) {
+          setLimitReached(true);
+        }
+      }
+
       historyRef.current = [...historyRef.current, { role: 'assistant', content: botMsg.content }];
       setMessages(prev => {
         const next = [...prev, botMsg];
@@ -147,13 +174,15 @@ export function useChat(sessionId, userId) {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, userId, persistHistory, detectedCase, intakeComplete]);
+  }, [sessionId, userId, persistHistory, detectedCase, intakeComplete, limitReached]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
     historyRef.current = [];
     setDetectedCase(null);
     setIntakeComplete(false);
+    setLimitReached(false);
+    setMessagesRemaining(DEFAULT_MESSAGE_LIMIT);
     setError(null);
     loadedSessionRef.current = null;
   }, []);
@@ -164,6 +193,8 @@ export function useChat(sessionId, userId) {
     error,
     detectedCase,
     intakeComplete,
+    limitReached,
+    messagesRemaining,
     sendMessage,
     clearHistory,
   };

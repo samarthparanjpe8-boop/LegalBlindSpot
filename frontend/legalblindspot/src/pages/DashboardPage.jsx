@@ -38,7 +38,7 @@ export default function DashboardPage({
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('chat');
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [showSessionDropdown, setShowSessionDropdown] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [isPromptingBudget, setIsPromptingBudget] = useState(false);
   const [budgetVal, setBudgetVal] = useState('');
   const [isCreatingSession, setIsCreatingSession] = useState(false);
@@ -49,15 +49,25 @@ export default function DashboardPage({
     sendMessage,
     detectedCase,
     intakeComplete,
+    limitReached,
+    messagesRemaining,
   } = useChat(session.sessionId, user?.id);
 
   const activeCaseType = session.caseType || detectedCase;
+
+  const advocateCity = session.city || user?.city || null;
 
   const {
     advocates,
     isLoading: advocatesLoading,
     error: advocatesError,
-  } = useAdvocates(session.city, activeCaseType, session.budget, intakeComplete);
+  } = useAdvocates(advocateCity, null, null, Boolean(advocateCity));
+
+  useEffect(() => {
+    if (!session.sessionId && activeTab === 'documents') {
+      setActiveTab('chat');
+    }
+  }, [session.sessionId, activeTab]);
 
   useEffect(() => {
     if (detectedCase && detectedCase !== session.caseType) {
@@ -87,6 +97,10 @@ export default function DashboardPage({
   const handleSend = async (text) => {
     if (!session.sessionId) {
       setIsPromptingBudget(true);
+      return;
+    }
+    if (limitReached) {
+      addToast('Consultation message limit reached. Start a new chat to continue.', 'info');
       return;
     }
     if (text === 'intake') {
@@ -140,7 +154,84 @@ export default function DashboardPage({
     return scoreB - scoreA;
   });
 
+  const renderAdvocatesSection = () => (
+    <div className="tab-section">
+      <h2 className="tab-section-title">
+        <Users size={22} className="tab-title-icon" />
+        {advocateCity ? `Advocates in ${advocateCity}` : 'City Advocates'}
+      </h2>
+      {!advocateCity ? (
+        <EmptyState
+          icon={<Users size={40} />}
+          heading="City not set"
+          message="Advocates are shown for your city only. Set your city in your profile or start a chat to see local advocates."
+        />
+      ) : advocatesLoading ? (
+        <div className="tab-loading"><Spinner size={32} /></div>
+      ) : advocatesError ? (
+        <EmptyState
+          icon={<Users size={40} />}
+          heading="Unable to load advocates"
+          message={advocatesError}
+        />
+      ) : advocates.length === 0 ? (
+        <EmptyState
+          icon={<Users size={40} />}
+          heading="No advocates found"
+          message={`No advocates found in ${advocateCity}. Try starting a chat with a different city.`}
+        />
+      ) : (
+        <div className="advocates-grid">
+          {sortedAdvocates.map((adv, idx) => (
+            <AdvocateCard
+              key={adv._id || adv.id || idx}
+              advocate={adv}
+              userBudget={session.budget}
+              animationDelay={idx * 100}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const renderActiveSection = () => {
+    if (activeTab === 'history') {
+      return (
+        <ChatHistoryPanel
+          userId={user?.id}
+          currentSessionId={session.sessionId}
+          onSelectSession={handleSelectHistorySession}
+        />
+      );
+    }
+
+    if (activeTab === 'advocates') {
+      return renderAdvocatesSection();
+    }
+
+    if (activeTab === 'advice') {
+      return <AdviceCheckPanel caseType={activeCaseType} />;
+    }
+
+    if (activeTab === 'documents') {
+      if (!session.sessionId) {
+        return (
+          <EmptyState
+            icon={<CheckSquare size={40} />}
+            heading="Start a chat first"
+            message="Document checklists are generated after you begin a consultation. Click Start Chat to get your customized list."
+          />
+        );
+      }
+      return (
+        <DocumentChecklist
+          caseType={activeCaseType}
+          sessionId={session.sessionId}
+        />
+      );
+    }
+
     if (!session.sessionId) {
       return (
         <div className="empty-chat-welcome glass-card">
@@ -159,77 +250,20 @@ export default function DashboardPage({
       );
     }
 
-    switch (activeTab) {
-      case 'chat':
-        return (
-          <ChatWindow
-            messages={messages}
-            isLoading={chatLoading}
-            onSend={handleSend}
-            intakeComplete={intakeComplete}
-          />
-        );
-      case 'history':
-        return (
-          <ChatHistoryPanel
-            userId={user?.id}
-            currentSessionId={session.sessionId}
-            onSelectSession={handleSelectHistorySession}
-          />
-        );
-      case 'advocates':
-        return (
-          <div className="tab-section">
-            <h2 className="tab-section-title">
-              <Users size={22} className="tab-title-icon" />
-              Matching Advocates
-            </h2>
-            {!intakeComplete ? (
-              <EmptyState
-                icon={<Users size={40} />}
-                heading="Complete your consultation first"
-                message="Advocates will appear once you have shared all details about your case — what happened, your evidence, and case-specific information."
-              />
-            ) : advocatesLoading ? (
-              <div className="tab-loading"><Spinner size={32} /></div>
-            ) : advocatesError ? (
-              <EmptyState
-                icon={<Users size={40} />}
-                heading="Unable to load advocates"
-                message={advocatesError}
-              />
-            ) : advocates.length === 0 ? (
-              <EmptyState
-                icon={<Users size={40} />}
-                heading="No advocates found"
-                message="No matching advocates found for your budget and city. Try increasing your budget or changing city."
-              />
-            ) : (
-              <div className="advocates-grid">
-                {sortedAdvocates.map((adv, idx) => (
-                  <AdvocateCard
-                    key={adv._id || adv.id || idx}
-                    advocate={adv}
-                    userBudget={session.budget}
-                    animationDelay={idx * 100}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      case 'advice':
-        return <AdviceCheckPanel caseType={activeCaseType} />;
-      case 'documents':
-        return (
-          <DocumentChecklist
-            caseType={activeCaseType}
-            sessionId={session.sessionId}
-          />
-        );
-      default:
-        return null;
+    if (activeTab === 'chat') {
+      return (
+        <ChatWindow
+          messages={messages}
+          isLoading={chatLoading}
+          onSend={handleSend}
+          intakeComplete={intakeComplete}
+          limitReached={limitReached}
+          messagesRemaining={messagesRemaining}
+        />
+      );
     }
+
+    return null;
   };
 
   const menuItems = [
@@ -237,7 +271,9 @@ export default function DashboardPage({
     { id: 'history', label: 'Chat History', icon: <History size={18} /> },
     { id: 'advocates', label: 'Advocates', icon: <Users size={18} /> },
     { id: 'advice', label: 'Advice Check', icon: <Sparkles size={18} /> },
-    { id: 'documents', label: 'Documents', icon: <CheckSquare size={18} /> },
+    ...(session.sessionId
+      ? [{ id: 'documents', label: 'Documents', icon: <CheckSquare size={18} /> }]
+      : []),
   ];
 
   return (
@@ -257,44 +293,67 @@ export default function DashboardPage({
         </div>
 
         <div className="dashboard-header-right">
-          {session.sessionId && (
-            <div className="session-dropdown-container">
-              <button
-                className={`session-dropdown-trigger glass-card-sm ${showSessionDropdown ? 'active' : ''}`}
-                onClick={() => setShowSessionDropdown(!showSessionDropdown)}
-              >
-                <div className="session-trigger-avatar">
-                  <User size={16} />
-                </div>
-                <div className="session-trigger-info">
-                  <span className="session-trigger-label">Your Session</span>
-                  <span className="session-trigger-value">
-                    {session.city || 'Select City'} • ₹{session.budget?.toLocaleString('en-IN') || '0'}
-                  </span>
-                </div>
-                <span className="session-trigger-arrow">▼</span>
-              </button>
+          <div className="profile-dropdown-container">
+            <button
+              type="button"
+              className={`profile-dropdown-trigger glass-card-sm ${showProfileDropdown ? 'active' : ''}`}
+              onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+              aria-label="Open profile menu"
+            >
+              <div className="profile-trigger-avatar">
+                <User size={18} />
+              </div>
+            </button>
 
-              {showSessionDropdown && (
-                <>
-                  <div className="session-dropdown-backdrop" onClick={() => setShowSessionDropdown(false)} />
-                  <div className="session-dropdown-panel">
-                    <SessionPanel
-                      session={session}
-                      onCityChange={handleCityChange}
-                      onBudgetChange={handleBudgetChange}
-                      onLogout={handleLogoutClick}
-                    />
+            {showProfileDropdown && (
+              <>
+                <div
+                  className="profile-dropdown-backdrop"
+                  onClick={() => setShowProfileDropdown(false)}
+                />
+                <div className="profile-dropdown-panel">
+                  <div className="profile-dropdown-header">
+                    <div className="profile-dropdown-avatar">
+                      <User size={20} />
+                    </div>
+                    <div className="profile-dropdown-info">
+                      <span className="profile-dropdown-name">{user?.name || 'User'}</span>
+                      <span className="profile-dropdown-email">{user?.email}</span>
+                      {user?.city && (
+                        <span className="profile-dropdown-city">{user.city}</span>
+                      )}
+                    </div>
                   </div>
-                </>
-              )}
-            </div>
-          )}
+
+                  {session.sessionId && (
+                    <div className="profile-dropdown-session">
+                      <SessionPanel
+                        session={session}
+                        onCityChange={handleCityChange}
+                        onBudgetChange={handleBudgetChange}
+                        onLogout={handleLogoutClick}
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="profile-logout-btn"
+                    onClick={handleLogoutClick}
+                  >
+                    <LogOut size={16} />
+                    Log out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
       <div className="dashboard-layout">
-        <aside className={`dashboard-sidebar glass-panel ${showMobileSidebar ? 'sidebar-mobile-show' : ''}`}>
+        <div className="dashboard-sidebar-rail">
+          <aside className={`dashboard-sidebar glass-panel ${showMobileSidebar ? 'sidebar-mobile-show' : ''}`}>
           <div>
             <div className="sidebar-mobile-header">
               <h3>Navigation</h3>
@@ -313,8 +372,8 @@ export default function DashboardPage({
                     setShowMobileSidebar(false);
                   }}
                 >
-                  <Plus size={18} />
-                  New Chat
+                  <span className="nav-item-icon"><Plus size={18} /></span>
+                  <span className="nav-item-label">New Chat</span>
                 </button>
               )}
               {menuItems.map((item) => (
@@ -326,8 +385,8 @@ export default function DashboardPage({
                     setShowMobileSidebar(false);
                   }}
                 >
-                  {item.icon}
-                  {item.label}
+                  <span className="nav-item-icon">{item.icon}</span>
+                  <span className="nav-item-label">{item.label}</span>
                 </button>
               ))}
             </nav>
@@ -335,11 +394,12 @@ export default function DashboardPage({
 
           <div className="sidebar-footer">
             <button onClick={handleLogoutClick} className="sidebar-logout-link">
-              <LogOut size={18} />
-              Log out
+              <span className="nav-item-icon"><LogOut size={18} /></span>
+              <span className="nav-item-label">Log out</span>
             </button>
           </div>
         </aside>
+        </div>
 
         {showMobileSidebar && (
           <div className="sidebar-overlay" onClick={() => setShowMobileSidebar(false)} />

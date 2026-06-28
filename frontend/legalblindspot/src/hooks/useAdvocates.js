@@ -12,7 +12,7 @@ export function useAdvocates(city, caseType, maxBudget, enabled = true) {
     setError(null);
 
     try {
-      const data = await api.getAdvocates(city, caseType, maxBudget);
+      const data = await api.getAdvocates(city || undefined, caseType || undefined, maxBudget || undefined);
       setAdvocates(Array.isArray(data) ? data : data.advocates || []);
     } catch (err) {
       setError(err.message);

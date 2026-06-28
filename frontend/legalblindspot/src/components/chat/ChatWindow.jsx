@@ -5,7 +5,7 @@ import TypingIndicator from './TypingIndicator';
 import EmptyState from '../shared/EmptyState';
 import { Scale, MessageSquare } from 'lucide-react';
 
-export default function ChatWindow({ messages, isLoading, onSend, intakeComplete = false }) {
+export default function ChatWindow({ messages, isLoading, onSend, intakeComplete = false, limitReached = false, messagesRemaining }) {
   const listRef = useRef(null);
 
   useEffect(() => {
@@ -23,7 +23,13 @@ export default function ChatWindow({ messages, isLoading, onSend, intakeComplete
           </span>
           <div>
             <h3 className="chat-header-title">LegalLink Chat</h3>
-            <span className="chat-header-status">Online</span>
+            <span className="chat-header-status">
+              {limitReached
+                ? 'Limit reached'
+                : typeof messagesRemaining === 'number'
+                  ? `${messagesRemaining} messages left`
+                  : 'Online'}
+            </span>
           </div>
         </div>
       </div>
@@ -44,7 +50,13 @@ export default function ChatWindow({ messages, isLoading, onSend, intakeComplete
         {isLoading && <TypingIndicator />}
       </div>
 
-      <ChatInput onSend={onSend} disabled={isLoading} />
+      {limitReached && (
+        <div className="chat-limit-banner">
+          Consultation limit reached. Start a new chat from the sidebar to continue.
+        </div>
+      )}
+
+      <ChatInput onSend={onSend} disabled={isLoading || limitReached} />
     </div>
   );
 }

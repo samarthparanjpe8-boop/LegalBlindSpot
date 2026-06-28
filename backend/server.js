@@ -9,6 +9,7 @@ const CaseFile = require('./models/CaseFile');
 const CaseRequest = require('./models/CaseRequest');
 const User = require('./models/User');
 const geminiService = require('./services/geminiService');
+const chatFlow = require('./services/chatFlowService');
 const { calculateTrustScore } = require('./services/trustScoreService');
 const path = require('path');
 const multer = require('multer');
@@ -445,42 +446,46 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20 }) {
   }
 }
 
-function buildFallbackReply(message, detection, advocates) {
-  const caseLine = detection.caseType
-    ? `I detected this as a ${detection.caseType} matter.`
-    : 'Tell me a little more about what happened, when it happened, and what proof you have.';
-  const advocateLine = advocates.length
-    ? `I found ${advocates.length} matching advocate${advocates.length === 1 ? '' : 's'} within your city and budget.`
-    : 'Once the case type is clear, I can show matching advocates within your budget.';
+async function getChatReply(message, session, advocates, detection) {
+  const phase = chatFlow.getIntakePhase(session, message);
+  const contextParts = [
+    `SYSTEM CONTEXT (not visible to user):`,
+    `City: ${session.city} | Budget: Rs.${session.budget} | Case: ${session.caseType || detection.caseType || 'unknown'}`,
+    `Intake phase: ${phase} (intro -> evidence -> solution)`,
+    `User messages so far: ${chatFlow.countUserMessages(session.history)}`,
+  ];
 
-  return `${caseLine} ${advocateLine} Your next step is to gather documents, write a short timeline, and avoid paying large fees until an advocate reviews the facts.\n\nNote: This is for informational purposes only and not formal legal advice.`;
-}
+  if (advocates.length) {
+    contextParts.push(
+      `Matching advocates:\n${JSON.stringify(
+        advocates.map((adv) => ({
+          name: adv.name,
+          city: adv.city,
+          fee: adv.consultationFee,
+          trustScore: adv.trustScore,
+          badge: adv.trustResult.breakdown.badge,
+          practiceAreas: adv.practiceAreas,
+        })),
+        null,
+        2
+      )}`
+    );
+  }
 
-async function getChatReply(message, session, advocates) {
-  const context = advocates.length
-    ? `SYSTEM CONTEXT (not visible to user):
-City: ${session.city} | Budget: Rs.${session.budget} | Case: ${session.caseType}
-Matching advocates:
-${JSON.stringify(
-  advocates.map((adv) => ({
-    name: adv.name,
-    city: adv.city,
-    fee: adv.consultationFee,
-    trustScore: adv.trustScore,
-    badge: adv.trustResult.breakdown.badge,
-    practiceAreas: adv.practiceAreas,
-  })),
-  null,
-  2
-)}`
-    : '';
+  contextParts.push(
+    'Follow the intake phase. In intro: ask what happened, when, and who is involved. In evidence: ask for documents and proof. In solution: cite IPC/BNS sections, penalties, jail time, next steps, and 2-3 follow-up questions.'
+  );
 
   try {
-    const result = await geminiService.chatReply(message, session.history, context);
+    const result = await geminiService.chatReply(message, session.history, contextParts.join('\n'));
     session.history = result.history;
-    return result.content;
-  } catch {
-    return null;
+    return { content: result.content, rateLimited: false };
+  } catch (err) {
+    console.error('Gemini chatReply failed:', err.message || err);
+    if (chatFlow.isRateLimitError(err)) {
+      return { content: null, rateLimited: true };
+    }
+    return { content: null, rateLimited: false };
   }
 }
 
@@ -641,6 +646,22 @@ app.post('/api/chat', async (req, res) => {
   }
   session.lastUserMessage = message;
 
+  const userMessageCount = chatFlow.countUserMessages(session.history);
+  if (userMessageCount >= chatFlow.MAX_USER_MESSAGES) {
+    const limitReply = chatFlow.buildLimitReachedReply(session);
+    return sendData(res, {
+      reply: limitReply,
+      caseType: session.caseType,
+      city: session.city,
+      budget: session.budget,
+      viability: session.lastViabilityResult,
+      advocates: [],
+      intakeComplete: isIntakeComplete(session),
+      limitReached: true,
+      messagesRemaining: 0,
+    });
+  }
+
   const detection = await geminiService.detectCaseAndBudget(message);
   if (detection.cityMentioned) session.city = detection.cityMentioned;
   if (detection.budgetMentioned) session.budget = detection.budgetMentioned;
@@ -669,10 +690,12 @@ app.post('/api/chat', async (req, res) => {
       })
     : [];
 
-  const aiReply = await getChatReply(message, session, advocates);
-  const reply = aiReply || buildFallbackReply(message, detection, advocates);
-
-  if (!aiReply) {
+  const aiResult = await getChatReply(message, session, advocates, detection);
+  let reply = aiResult.content;
+  if (!reply) {
+    reply = aiResult.rateLimited
+      ? chatFlow.buildRateLimitReply()
+      : chatFlow.buildStructuredReply(message, session, detection, advocates);
     session.history.push({ role: 'user', content: message });
     session.history.push({ role: 'assistant', content: reply });
   }
@@ -699,6 +722,8 @@ app.post('/api/chat', async (req, res) => {
   }
 
 
+  const messagesRemaining = Math.max(0, chatFlow.MAX_USER_MESSAGES - chatFlow.countUserMessages(session.history));
+
   sendData(res, {
     reply,
     caseType: session.caseType,
@@ -707,6 +732,8 @@ app.post('/api/chat', async (req, res) => {
     viability,
     advocates: intakeCompleteAfter ? advocates : [],
     intakeComplete: intakeCompleteAfter,
+    limitReached: messagesRemaining === 0,
+    messagesRemaining,
   });
 });
 

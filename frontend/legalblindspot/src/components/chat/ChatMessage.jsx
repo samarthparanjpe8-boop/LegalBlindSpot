@@ -1,6 +1,25 @@
 import { formatTime, formatCurrency } from '../../utils/formatters';
 import TrustBadge from '../shared/TrustBadge';
 
+function formatChatContent(content) {
+  if (!content) return null;
+  return content.split('\n').map((line, lineIdx, lines) => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+    const formatted = parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+    return (
+      <span key={lineIdx}>
+        {formatted}
+        {lineIdx < lines.length - 1 ? <br /> : null}
+      </span>
+    );
+  });
+}
+
 export default function ChatMessage({ message, intakeComplete = false }) {
   const isUser = message.role === 'user';
   const showAdvocates = intakeComplete && message.advocates && message.advocates.length > 0;
@@ -21,9 +40,9 @@ export default function ChatMessage({ message, intakeComplete = false }) {
           </div>
         )}
 
-        <div className={`chat-bubble ${isUser ? 'chat-bubble-user' : 'chat-bubble-bot'}`}>
-          <div className="chat-content">{message.content}</div>
-        </div>
+          <div className={`chat-bubble ${isUser ? 'chat-bubble-user' : 'chat-bubble-bot'}`}>
+            <div className="chat-content">{formatChatContent(message.content)}</div>
+          </div>
 
         {message.viability && (
           <div className="chat-viability-card">
