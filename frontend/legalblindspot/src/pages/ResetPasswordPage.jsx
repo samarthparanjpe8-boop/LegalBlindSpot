@@ -19,14 +19,19 @@ const ResetPasswordPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setMessage('');
+    setError('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError('Passwords do not match');
       return;
     }
 
     setLoading(true);
-    setMessage('');
-    setError('');
     try {
       const res = await fetch(`${BASE_URL}/api/auth/reset-password`, {
         method: 'POST',
@@ -37,7 +42,7 @@ const ResetPasswordPage = () => {
       if (!res.ok) throw new Error(data.error || data.message || 'Failed to reset password');
       setMessage(data.message || 'Password successfully updated.');
       setTimeout(() => {
-        navigate('/login');
+        navigate('/login', { state: { message: 'Password reset successful. Please log in with your new password.' } });
       }, 2000);
     } catch (err) {
       setError(err.message || 'Failed to reset password');

@@ -5,7 +5,6 @@ import ChatWindow from '../components/chat/ChatWindow';
 import AdvocateCard from '../components/advocates/AdvocateCard';
 import AdviceCheckPanel from '../components/dashboard/AdviceCheckPanel';
 import DocumentChecklist from '../components/dashboard/DocumentChecklist';
-import AdvocateLeaderboard from '../components/advocates/AdvocateLeaderboard';
 import ChatHistoryPanel from '../components/dashboard/ChatHistoryPanel';
 import Spinner from '../components/shared/Spinner';
 import EmptyState from '../components/shared/EmptyState';
@@ -15,7 +14,6 @@ import {
   MessageSquare,
   Users,
   CheckSquare,
-  Compass,
   LogOut,
   Plus,
   X,
@@ -57,8 +55,9 @@ export default function DashboardPage({
 
   const {
     advocates,
-    isLoading: advocatesLoading
-  } = useAdvocates(session.city, activeCaseType, session.budget);
+    isLoading: advocatesLoading,
+    error: advocatesError,
+  } = useAdvocates(session.city, activeCaseType, session.budget, intakeComplete);
 
   useEffect(() => {
     if (detectedCase && detectedCase !== session.caseType) {
@@ -107,13 +106,12 @@ export default function DashboardPage({
     if (!budgetVal || isCreatingSession) return;
     setIsCreatingSession(true);
     try {
-      clearSession();
       const targetCity = session.city || user?.city || 'Mumbai';
       await createSession(targetCity, Number(budgetVal));
       setIsPromptingBudget(false);
       setBudgetVal('');
       setActiveTab('chat');
-      addToast('New session started', 'success');
+      addToast('New consultation started', 'success');
     } catch (err) {
       addToast(err.message || 'Failed to start session', 'error');
     } finally {
@@ -194,6 +192,12 @@ export default function DashboardPage({
               />
             ) : advocatesLoading ? (
               <div className="tab-loading"><Spinner size={32} /></div>
+            ) : advocatesError ? (
+              <EmptyState
+                icon={<Users size={40} />}
+                heading="Unable to load advocates"
+                message={advocatesError}
+              />
             ) : advocates.length === 0 ? (
               <EmptyState
                 icon={<Users size={40} />}
@@ -223,8 +227,6 @@ export default function DashboardPage({
             sessionId={session.sessionId}
           />
         );
-      case 'leaderboard':
-        return <AdvocateLeaderboard />;
       default:
         return null;
     }
@@ -236,7 +238,6 @@ export default function DashboardPage({
     { id: 'advocates', label: 'Advocates', icon: <Users size={18} /> },
     { id: 'advice', label: 'Advice Check', icon: <Sparkles size={18} /> },
     { id: 'documents', label: 'Documents', icon: <CheckSquare size={18} /> },
-    { id: 'leaderboard', label: 'Leaderboard', icon: <Compass size={18} /> },
   ];
 
   return (
@@ -303,6 +304,19 @@ export default function DashboardPage({
             </div>
 
             <nav className="sidebar-nav">
+              {session.sessionId && (
+                <button
+                  type="button"
+                  className="nav-item nav-item-new-chat"
+                  onClick={() => {
+                    handleStartNewChatClick();
+                    setShowMobileSidebar(false);
+                  }}
+                >
+                  <Plus size={18} />
+                  New Chat
+                </button>
+              )}
               {menuItems.map((item) => (
                 <button
                   key={item.id}
@@ -348,9 +362,13 @@ export default function DashboardPage({
                 <div className="budget-modal-icon">
                   <Coins size={24} />
                 </div>
-                <h3 className="budget-modal-title">Set Session Budget</h3>
+                <h3 className="budget-modal-title">
+                  {session.sessionId ? 'New Consultation' : 'Set Session Budget'}
+                </h3>
                 <p className="budget-modal-desc">
-                  Define your maximum consultation budget. This will filter advocates accordingly.
+                  {session.sessionId
+                    ? 'Set a budget for this new consultation. Your city and previous chats will be preserved.'
+                    : 'Define your maximum consultation budget. This will filter advocates accordingly.'}
                 </p>
               </div>
 
@@ -381,7 +399,7 @@ export default function DashboardPage({
               </div>
 
               <button type="submit" disabled={isCreatingSession} className="budget-submit-btn">
-                {isCreatingSession ? 'Starting Session...' : 'Start Session'}
+                {isCreatingSession ? 'Starting...' : session.sessionId ? 'Start New Chat' : 'Start Session'}
               </button>
             </form>
           </div>

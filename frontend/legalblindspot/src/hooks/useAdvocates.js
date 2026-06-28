@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as api from '../services/api';
 
-export function useAdvocates(city, caseType, maxBudget) {
+export function useAdvocates(city, caseType, maxBudget, enabled = true) {
   const [advocates, setAdvocates] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchAdvocates = useCallback(async () => {
-    if (!city) return;
+    if (!enabled || !city) return;
     setIsLoading(true);
     setError(null);
 
@@ -20,7 +20,7 @@ export function useAdvocates(city, caseType, maxBudget) {
     } finally {
       setIsLoading(false);
     }
-  }, [city, caseType, maxBudget]);
+  }, [city, caseType, maxBudget, enabled]);
 
   useEffect(() => {
     fetchAdvocates();

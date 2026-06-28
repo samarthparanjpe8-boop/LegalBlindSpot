@@ -2,9 +2,14 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
+  const token = localStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   const config = {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
+    ...options,
+    headers,
   };
 
   const res = await fetch(url, config);
@@ -82,10 +87,6 @@ export async function getAdvocateById(id) {
   return request(`/api/advocates/${id}`);
 }
 
-export async function getLeaderboard() {
-  return request('/api/leaderboard');
-}
-
 export async function getCaseFile(sessionId) {
   return request(`/api/case-file/${sessionId}`);
 }
@@ -95,15 +96,5 @@ export async function getChatHistory(sessionId) {
 }
 
 export async function getUserChatHistories() {
-  const token = localStorage.getItem('token');
-  const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  const res = await fetch(`${BASE}/api/chat/history`, {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
-  return json.data !== undefined ? json.data : json;
+  return request('/api/chat/history');
 }

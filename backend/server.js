@@ -94,7 +94,7 @@ async function sendMagicLinkEmail(email, token) {
 
 // Helper to send a password reset email
 async function sendResetPasswordEmail(email, token) {
-  const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+  const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${encodeURIComponent(token)}`;
   const mailOptions = {
     from: process.env.SMTP_USER || 'no-reply@legalblindspot.com',
     to: email,
@@ -102,7 +102,15 @@ async function sendResetPasswordEmail(email, token) {
     text: `Click the link to reset your password: ${resetUrl}`,
     html: `<p>Click <a href="${resetUrl}">here</a> to reset your password.</p>`,
   };
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (err) {
+    console.error('Failed to send reset email:', err.message);
+    console.log('Password reset link (dev fallback):', resetUrl);
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
+  }
 }
 
 
@@ -307,12 +315,14 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
   try {
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      return res.json({ message: 'If that email exists, we sent a password reset link.' });
+    }
 
-    const token = jwt.sign({ sub: user._id.toString(), email: user.email }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const token = jwt.sign({ sub: user._id.toString(), email: user.email, purpose: 'reset' }, process.env.JWT_SECRET, { expiresIn: '15m' });
     await sendResetPasswordEmail(user.email, token);
 
-    res.json({ message: 'Password reset link sent to email' });
+    res.json({ message: 'If that email exists, we sent a password reset link.' });
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ error: err.message });
@@ -328,14 +338,20 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.purpose && payload.purpose !== 'reset') {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
     const user = await User.findById(payload.sub);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const salt = await bcrypt.genSalt(10);
-    user.passwordHash = await bcrypt.hash(password, salt);
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
     await user.save();
 
-    res.json({ message: 'Password reset successful' });
+    res.json({ message: 'Password reset successful. You can now log in with your new password.' });
   } catch (err) {
     console.error('Reset password error:', err);
     res.status(400).json({ error: 'Invalid or expired reset token' });
