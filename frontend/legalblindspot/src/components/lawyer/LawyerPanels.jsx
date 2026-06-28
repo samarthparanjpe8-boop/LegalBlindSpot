@@ -8,6 +8,9 @@ import {
   MapPin,
   IndianRupee,
   User,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Spinner from '../shared/Spinner';
@@ -16,10 +19,45 @@ import { StatusBadge, formatRequestDate } from './LawyerLayout';
 import { formatCurrency } from '../../utils/formatters';
 import * as api from '../../services/api';
 
+// Renders individual chat messages for lawyers to read
+function InlineChatMessage({ message }) {
+  const isUser = message.role === 'user';
+  return (
+    <div
+      className="lawyer-inline-msg"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
+        marginBottom: '8px',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '85%',
+          padding: '8px 12px',
+          borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+          background: isUser ? 'var(--accent)' : 'var(--bg-tertiary, var(--bg-secondary))',
+          color: isUser ? '#fff' : 'var(--text-primary)',
+          fontSize: '0.82rem',
+          lineHeight: '1.5',
+          border: isUser ? 'none' : '1px solid var(--border)',
+        }}
+      >
+        <div style={{ fontWeight: 600, fontSize: '0.7rem', marginBottom: '4px', opacity: 0.75 }}>
+          {isUser ? 'Client' : 'LegalLink AI'}
+        </div>
+        {message.content}
+      </div>
+    </div>
+  );
+}
+
 export default function PendingRequestsPanel({ requests, loading, onRefresh }) {
   const [processingId, setProcessingId] = useState(null);
   const [declineId, setDeclineId] = useState(null);
   const [declineReason, setDeclineReason] = useState('');
+  const [expandedChat, setExpandedChat] = useState({});
 
   const handleDecision = async (id, decision, reason) => {
     setProcessingId(id);
@@ -33,6 +71,10 @@ export default function PendingRequestsPanel({ requests, loading, onRefresh }) {
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const toggleChat = (id) => {
+    setExpandedChat((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   if (loading) {
@@ -84,6 +126,50 @@ export default function PendingRequestsPanel({ requests, loading, onRefresh }) {
               <h4>AI Case Summary</h4>
               <p>{req.aiSummary || req.description}</p>
             </div>
+
+            {/* Inline Chat History */}
+            {req.chatHistory && req.chatHistory.length > 0 && (
+              <div className="lawyer-chat-preview">
+                <button
+                  type="button"
+                  className="lawyer-chat-preview-toggle"
+                  onClick={() => toggleChat(req._id)}
+                >
+                  <MessageSquare size={14} />
+                  {req.chatName ? (
+                    <span>Read Chat: <strong>{req.chatName}</strong></span>
+                  ) : (
+                    <span>Read Full Chat History ({req.chatHistory.length} messages)</span>
+                  )}
+                  {expandedChat[req._id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+
+                {req.sessionId && (
+                  <span className="lawyer-chat-session-id">
+                    Session ID: {req.sessionId}
+                  </span>
+                )}
+
+                {expandedChat[req._id] && (
+                  <div className="lawyer-chat-preview-messages">
+                    <div
+                      style={{
+                        maxHeight: '380px',
+                        overflowY: 'auto',
+                        padding: '12px',
+                        background: 'var(--bg-primary, #0d1117)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      {req.chatHistory.map((msg, i) => (
+                        <InlineChatMessage key={i} message={msg} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {declineId === req._id ? (
               <div className="lawyer-decline-form">

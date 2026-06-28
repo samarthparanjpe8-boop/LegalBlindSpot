@@ -5258,3 +5258,284 @@ p {
   .lawyer-request-actions, .lawyer-client-actions { flex-direction: column; }
   .lawyer-case-header { flex-direction: column; gap: var(--space-3); }
 }
+
+/* ═══════════════════════════════════════
+   Chat History Panel – Named Chats
+   ═══════════════════════════════════════ */
+.chat-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  text-align: left;
+  transition: var(--transition);
+  animation: slide-up 0.3s var(--ease-out-expo) both;
+  cursor: default;
+}
+
+.chat-history-item:hover {
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+}
+
+.chat-history-item-active {
+  border-color: var(--accent) !important;
+  background: var(--accent-dim) !important;
+}
+
+.chat-history-item-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.chat-history-item-preview {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.chat-history-item-footer {
+  margin-top: var(--space-3);
+}
+
+.chat-history-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+}
+
+/* Copy ID button */
+.chat-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.chat-copy-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.chat-copy-btn-success {
+  color: var(--success) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Load Chat button */
+.chat-load-btn {
+  font-size: 0.78rem;
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.chat-load-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* Rename controls */
+.chat-rename-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.chat-history-item:hover .chat-rename-btn {
+  opacity: 1;
+}
+
+.chat-rename-btn:hover {
+  color: var(--accent);
+}
+
+.chat-rename-input {
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-rename-save,
+.chat-rename-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.chat-rename-save { color: var(--success); }
+.chat-rename-save:hover { border-color: var(--success); background: rgba(16,185,129,0.08); }
+.chat-rename-cancel { color: var(--text-muted); }
+.chat-rename-cancel:hover { border-color: var(--border-light); color: var(--text-primary); }
+
+/* ═══════════════════════════════════════
+   Consult Request Modal – Session Picker
+   ═══════════════════════════════════════ */
+.consult-session-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.consult-select-wrapper {
+  position: relative;
+}
+
+.consult-session-select {
+  width: 100%;
+  padding: 10px 36px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: var(--transition);
+}
+
+.consult-session-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.consult-select-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-muted);
+}
+
+.consult-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(201,55,44,0.2);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+.consult-session-chip code {
+  font-family: monospace;
+  font-size: 0.7rem;
+}
+
+.consult-sessions-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
+
+.consult-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ═══════════════════════════════════════
+   Lawyer – Inline Chat Preview on Pending
+   ═══════════════════════════════════════ */
+.lawyer-chat-preview {
+  margin: var(--space-3) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.lawyer-chat-preview-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-hover);
+  border: none;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+}
+
+.lawyer-chat-preview-toggle:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.lawyer-chat-preview-toggle span {
+  flex: 1;
+}
+
+.lawyer-chat-preview-toggle strong {
+  color: var(--text-primary);
+}
+
+.lawyer-chat-session-id {
+  display: block;
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 4px var(--space-4);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.lawyer-chat-preview-messages {
+  border-top: 1px solid var(--border);
+}

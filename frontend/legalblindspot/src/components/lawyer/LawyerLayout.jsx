@@ -53,38 +53,40 @@ export default function LawyerLayout({ activeTab, onTabChange, children }) {
       </header>
 
       <div className="dashboard-layout">
-        <aside className={`dashboard-sidebar glass-panel ${showMobileSidebar ? 'sidebar-mobile-show' : ''}`}>
-          <div>
-            <div className="sidebar-mobile-header">
-              <h3>Navigation</h3>
-              <button type="button" className="sidebar-close-btn" onClick={() => setShowMobileSidebar(false)}>
-                <X size={20} />
+        <div className="dashboard-sidebar-rail">
+          <aside className={`dashboard-sidebar glass-panel ${showMobileSidebar ? 'sidebar-mobile-show' : ''}`}>
+            <div>
+              <div className="sidebar-mobile-header">
+                <h3>Navigation</h3>
+                <button type="button" className="sidebar-close-btn" onClick={() => setShowMobileSidebar(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <nav className="sidebar-nav">
+                {menuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`nav-item ${activeTab === item.id ? 'nav-item-active' : ''}`}
+                    onClick={() => {
+                      onTabChange(item.id);
+                      setShowMobileSidebar(false);
+                    }}
+                  >
+                    <span className="nav-item-icon">{item.icon}</span>
+                    <span className="nav-item-label">{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+            <div className="sidebar-footer">
+              <button type="button" onClick={handleLogout} className="sidebar-logout-link">
+                <span className="nav-item-icon"><LogOut size={18} /></span>
+                <span className="nav-item-label">Log out</span>
               </button>
             </div>
-            <nav className="sidebar-nav">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`nav-item ${activeTab === item.id ? 'nav-item-active' : ''}`}
-                  onClick={() => {
-                    onTabChange(item.id);
-                    setShowMobileSidebar(false);
-                  }}
-                >
-                  {item.icon}
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-          <div className="sidebar-footer">
-            <button type="button" onClick={handleLogout} className="sidebar-logout-link">
-              <LogOut size={18} />
-              Log out
-            </button>
-          </div>
-        </aside>
+          </aside>
+        </div>
 
         {showMobileSidebar && (
           <div className="sidebar-overlay" onClick={() => setShowMobileSidebar(false)} />

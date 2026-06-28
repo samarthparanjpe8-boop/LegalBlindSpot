@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, Send, Paperclip } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Send, Paperclip, MessageSquare, ChevronDown } from 'lucide-react';
 import * as api from '../../services/api';
 import Spinner from '../shared/Spinner';
 
@@ -17,8 +17,36 @@ export default function ConsultRequestModal({
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [userSessions, setUserSessions] = useState([]);
+  const [selectedSessionId, setSelectedSessionId] = useState(sessionId || '');
+  const [loadingSessions, setLoadingSessions] = useState(false);
 
   const canRequest = advocate?.canReceiveRequests !== false && advocate?.lawyerUserId;
+
+  useEffect(() => {
+    async function loadSessions() {
+      setLoadingSessions(true);
+      try {
+        const sessions = await api.getUserChatHistories();
+        setUserSessions(sessions || []);
+      } catch {
+        setUserSessions([]);
+      } finally {
+        setLoadingSessions(false);
+      }
+    }
+    loadSessions();
+  }, []);
+
+  // When a session is picked, auto-populate description from that session's preview
+  const handleSessionSelect = (sid) => {
+    setSelectedSessionId(sid);
+    if (!sid) return;
+    const sess = userSessions.find((s) => s.sessionId === sid);
+    if (sess?.preview && !description) {
+      setDescription(sess.preview);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,7 +62,7 @@ export default function ConsultRequestModal({
       formData.append('city', city || advocate.city || 'Mumbai');
       formData.append('description', description);
       if (budget) formData.append('budgetInr', budget);
-      if (sessionId) formData.append('sessionId', sessionId);
+      if (selectedSessionId) formData.append('sessionId', selectedSessionId);
       files.forEach((file) => formData.append('attachments', file));
 
       await api.createCaseRequest(formData);
@@ -58,7 +86,7 @@ export default function ConsultRequestModal({
           <div className="budget-modal-header">
             <h3 className="budget-modal-title">Request Consultation</h3>
             <p className="budget-modal-desc">
-              Send a consultation request to {advocate.name}. They will review your case summary and respond.
+              Send a consultation request to <strong>{advocate.name}</strong>. You can attach a chat so they can read your full conversation history before deciding.
             </p>
           </div>
 
@@ -69,6 +97,45 @@ export default function ConsultRequestModal({
           )}
 
           {error && <div className="consult-error">{error}</div>}
+
+          {/* Share a Chat dropdown */}
+          <div className="consult-field">
+            <label className="session-row-label">
+              <MessageSquare size={14} /> Attach a Chat (optional)
+            </label>
+            <div className="consult-session-select-wrap">
+              {loadingSessions ? (
+                <div className="consult-sessions-loading">
+                  <Spinner size={14} /> Loading your chats...
+                </div>
+              ) : (
+                <div className="consult-select-wrapper">
+                  <select
+                    className="consult-session-select"
+                    value={selectedSessionId}
+                    onChange={(e) => handleSessionSelect(e.target.value)}
+                  >
+                    <option value="">— No chat attached —</option>
+                    {userSessions.map((sess) => (
+                      <option key={sess.sessionId} value={sess.sessionId}>
+                        {sess.chatName || sess.caseType || 'Consultation'} · ID: {sess.sessionId.slice(-8)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="consult-select-arrow" />
+                </div>
+              )}
+              {selectedSessionId && (
+                <div className="consult-session-chip">
+                  <MessageSquare size={12} />
+                  <span>Chat ID: <code>{selectedSessionId}</code> attached</span>
+                </div>
+              )}
+            </div>
+            <p className="consult-hint">
+              The lawyer will be able to read your full chat history for the selected session.
+            </p>
+          </div>
 
           <div className="consult-field">
             <label className="session-row-label">Case Summary</label>

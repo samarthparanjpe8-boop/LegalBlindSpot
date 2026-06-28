@@ -685,6 +685,10 @@ async function upsertCaseFile(session, description, userId) {
     existing.caseSummary = description || existing.caseSummary;
     existing.chatHistory = session.history;
     if (userId) existing.userId = userId;
+    // Update chatName if we have more info now
+    if (!existing.chatName && session.caseType && session.city) {
+      existing.chatName = `${session.caseType} · ${session.city}`;
+    }
     return existing.save();
   }
 
@@ -697,9 +701,16 @@ async function upsertCaseFile(session, description, userId) {
     }
   }
 
+  const chatName = session.caseType && session.city
+    ? `${session.caseType} · ${session.city}`
+    : session.city
+      ? `Consultation · ${session.city}`
+      : `Consultation · ${new Date().toLocaleDateString('en-IN')}`;
+
   return CaseFile.create({
     sessionId: session.sessionId,
     userId: userId || null,
+    chatName,
     caseType: session.caseType || null,
     city: session.city,
     budgetInr: session.budget,
@@ -950,11 +961,12 @@ app.get('/api/chat/history', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const caseFiles = await CaseFile.find({ userId })
       .sort({ createdAt: -1 })
-      .select('sessionId caseType city budgetInr caseSummary chatHistory createdAt')
+      .select('sessionId chatName caseType city budgetInr caseSummary chatHistory createdAt')
       .lean();
 
     const sessions = caseFiles.map((cf) => ({
       sessionId: cf.sessionId,
+      chatName: cf.chatName || (cf.caseType && cf.city ? `${cf.caseType} · ${cf.city}` : cf.sessionId),
       caseType: cf.caseType,
       city: cf.city,
       budget: cf.budgetInr,
@@ -964,6 +976,23 @@ app.get('/api/chat/history', authenticateToken, async (req, res) => {
     }));
 
     sendData(res, sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rename a chat session
+app.patch('/api/chat/history/:sessionId/name', authenticateToken, async (req, res) => {
+  try {
+    const { chatName } = req.body;
+    if (!chatName?.trim()) return res.status(400).json({ error: 'Chat name is required' });
+    const caseFile = await CaseFile.findOneAndUpdate(
+      { sessionId: req.params.sessionId, userId: req.user.id },
+      { chatName: chatName.trim() },
+      { new: true }
+    );
+    if (!caseFile) return res.status(404).json({ error: 'Session not found' });
+    sendData(res, { sessionId: caseFile.sessionId, chatName: caseFile.chatName });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1210,6 +1239,27 @@ app.get('/api/requests/lawyer', authenticateToken, requireRole('lawyer'), async 
     .populate('client', 'name gender city email createdAt')
     .sort({ createdAt: -1 })
     .lean();
+
+  // For pending requests, embed the linked chat history so lawyers can read before deciding
+  if (status === 'pending') {
+    const enriched = await Promise.all(requests.map(async (req) => {
+      if (!req.sessionId) return { ...req, chatHistory: [], chatName: null };
+      try {
+        const caseFile = await CaseFile.findOne({ sessionId: req.sessionId })
+          .select('chatHistory chatName caseType city')
+          .lean();
+        return {
+          ...req,
+          chatHistory: caseFile?.chatHistory || [],
+          chatName: caseFile?.chatName || (caseFile?.caseType && caseFile?.city ? `${caseFile.caseType} · ${caseFile.city}` : null),
+        };
+      } catch {
+        return { ...req, chatHistory: [], chatName: null };
+      }
+    }));
+    return sendData(res, enriched);
+  }
+
   sendData(res, requests);
 });
 

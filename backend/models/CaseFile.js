@@ -23,6 +23,7 @@ const adviceCheckSchema = new mongoose.Schema(
 const caseFileSchema = new mongoose.Schema({
   sessionId: String,
   userId: String,
+  chatName: { type: String, default: '' },
   caseType: String,
   city: String,
   budgetInr: Number,

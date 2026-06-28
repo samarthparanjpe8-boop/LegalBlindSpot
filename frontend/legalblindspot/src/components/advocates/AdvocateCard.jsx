@@ -157,7 +157,7 @@ export default function AdvocateCard({
         />
       )}
 
-      {showConsult && !compact && (
+      {!compact && (
         <div className="advocate-consult-wrap">
           {!canConsult ? (
             <div className="advocate-unavailable">
@@ -171,7 +171,7 @@ export default function AdvocateCard({
               onClick={() => setShowModal(true)}
             >
               <Send size={16} />
-              Send Request
+              Request Lawyer
             </button>
           )}
         </div>

@@ -6,7 +6,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "chat": "node chat.js",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "seed:lawyers": "node seed_lawyers.js"
   },
   "dependencies": {
     "@google/generative-ai": "latest",

@@ -185,3 +185,10 @@ export async function updateLawyerCapacity(updates) {
     body: JSON.stringify(updates),
   });
 }
+
+export async function renameChatSession(sessionId, chatName) {
+  return request(`/api/chat/history/${sessionId}/name`, {
+    method: 'PATCH',
+    body: JSON.stringify({ chatName }),
+  });
+}
