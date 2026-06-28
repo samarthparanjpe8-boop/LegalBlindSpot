@@ -71,6 +71,26 @@
   --space-24: 96px;
 }
 
+/* Light mode tokens */
+[data-theme="light"] {
+  --bg-primary: #F7F6F3;
+  --bg-secondary: #EFEEEA;
+  --bg-card: #FFFFFF;
+  --bg-hover: #E8E6E1;
+  --border: #D8D5CE;
+  --border-light: #C8C4BC;
+
+  --text-primary: #111110;
+  --text-secondary: #5C5A56;
+  --text-muted: #8A8780;
+
+  --accent-dim: rgba(201, 55, 44, 0.08);
+}
+
+[data-theme="light"] body {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
 
 /* ── Reset & Base ── */
 *,
@@ -3446,6 +3466,7 @@ p {
   border-top: 1px solid var(--border);
 }
 
+.sidebar-theme-toggle,
 .sidebar-logout-link {
   display: grid;
   grid-template-columns: 56px 1fr;
@@ -3462,6 +3483,7 @@ p {
   text-align: left;
 }
 
+.sidebar-theme-toggle:hover,
 .sidebar-logout-link:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -4009,6 +4031,30 @@ p {
   color: var(--dash-text);
 }
 
+[data-theme="light"] .dashboard-page {
+  --dash-bg: #F7F6F3;
+  --dash-bg-soft: #EFEEEA;
+  --dash-bg-elevated: #FFFFFF;
+  --dash-surface: rgba(255, 255, 255, 0.88);
+  --dash-surface-strong: rgba(255, 255, 255, 0.96);
+  --dash-white: #111110;
+  --dash-white-surface: rgba(17, 17, 16, 0.94);
+  --dash-white-muted: rgba(17, 17, 16, 0.06);
+  --dash-white-border: rgba(17, 17, 16, 0.12);
+  --dash-border: rgba(17, 17, 16, 0.08);
+  --dash-border-strong: rgba(17, 17, 16, 0.14);
+  --dash-text: #111110;
+  --dash-text-dark: #FAFAF7;
+  --dash-text-secondary: #5C5A56;
+  --dash-text-muted: #8A8780;
+  --dash-shadow: 0 12px 40px rgba(17, 17, 16, 0.08);
+
+  background:
+    radial-gradient(ellipse 70% 50% at 0% 0%, rgba(201, 55, 44, 0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(17, 17, 16, 0.02) 0%, transparent 50%),
+    linear-gradient(180deg, #FAFAF7 0%, #EFEEEA 100%) !important;
+}
+
 .dashboard-page .glass-panel {
   background: var(--dash-surface);
   backdrop-filter: var(--dash-blur);
@@ -4132,6 +4178,7 @@ p {
   border-top: 1px solid var(--dash-border);
 }
 
+.dashboard-page .sidebar-theme-toggle,
 .dashboard-page .sidebar-logout-link {
   display: grid;
   grid-template-columns: 56px 1fr;
@@ -4149,8 +4196,9 @@ p {
   cursor: pointer;
 }
 
+.dashboard-page .sidebar-theme-toggle:hover,
 .dashboard-page .sidebar-logout-link:hover {
-  color: var(--dash-white);
+  color: var(--dash-text);
   background: var(--dash-white-muted);
 }
 
@@ -5538,4 +5586,4 @@ p {
 
 .lawyer-chat-preview-messages {
   border-top: 1px solid var(--border);
-}
+}

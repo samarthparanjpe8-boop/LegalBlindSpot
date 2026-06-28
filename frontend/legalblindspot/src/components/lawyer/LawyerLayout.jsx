@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ThemeToggle from '../shared/ThemeToggle';
 import {
   LayoutDashboard,
   Inbox,
@@ -80,6 +81,7 @@ export default function LawyerLayout({ activeTab, onTabChange, children }) {
               </nav>
             </div>
             <div className="sidebar-footer">
+              <ThemeToggle />
               <button type="button" onClick={handleLogout} className="sidebar-logout-link">
                 <span className="nav-item-icon"><LogOut size={18} /></span>
                 <span className="nav-item-label">Log out</span>

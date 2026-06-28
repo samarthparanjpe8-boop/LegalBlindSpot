@@ -12,6 +12,7 @@ import LawyerDashboard from './pages/LawyerDashboard';
 import LawyerClientCasePage from './pages/LawyerClientCasePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { useSession } from './hooks/useSession';
 
 export default function App() {
@@ -28,8 +29,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <div className="app-container">
+      <ThemeProvider>
+        <AuthProvider>
+          <div className="app-container">
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route
@@ -91,7 +93,8 @@ export default function App() {
             ))}
           </div>
         </div>
-      </AuthProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

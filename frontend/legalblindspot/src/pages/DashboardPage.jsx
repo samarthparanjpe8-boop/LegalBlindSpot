@@ -8,6 +8,7 @@ import DocumentChecklist from '../components/dashboard/DocumentChecklist';
 import ChatHistoryPanel from '../components/dashboard/ChatHistoryPanel';
 import Spinner from '../components/shared/Spinner';
 import EmptyState from '../components/shared/EmptyState';
+import ThemeToggle from '../components/shared/ThemeToggle';
 import { useChat } from '../hooks/useChat';
 import { useAdvocates } from '../hooks/useAdvocates';
 import {
@@ -407,6 +408,7 @@ export default function DashboardPage({
           </div>
 
           <div className="sidebar-footer">
+            <ThemeToggle />
             <button onClick={handleLogoutClick} className="sidebar-logout-link">
               <span className="nav-item-icon"><LogOut size={18} /></span>
               <span className="nav-item-label">Log out</span>
