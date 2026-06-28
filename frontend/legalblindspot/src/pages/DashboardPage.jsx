@@ -212,6 +212,16 @@ export default function DashboardPage({
                     advocate={adv}
                     userBudget={session.budget}
                     animationDelay={idx * 100}
+                    showConsult={intakeComplete}
+                    sessionId={session.sessionId}
+                    caseType={activeCaseType}
+                    city={session.city}
+                    caseSummary={messages
+                      .filter((m) => m.role === 'user')
+                      .map((m) => m.content)
+                      .join('\n')
+                      .slice(0, 800)}
+                    onRequestSent={() => addToast('Consultation request sent successfully', 'success')}
                   />
                 ))}
               </div>

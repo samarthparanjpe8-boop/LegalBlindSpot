@@ -11,6 +11,8 @@ const caseHistoryEntrySchema = new mongoose.Schema(
 );
 
 const advocateSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  gender: String,
   name: String,
   barRegistrationNo: String,
   city: String,

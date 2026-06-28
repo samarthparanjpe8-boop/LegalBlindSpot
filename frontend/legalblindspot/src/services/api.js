@@ -98,3 +98,89 @@ export async function getChatHistory(sessionId) {
 export async function getUserChatHistories() {
   return request('/api/chat/history');
 }
+
+// Case requests
+export async function createCaseRequest(formData) {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`${BASE_URL}/api/requests`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
+  return json.data !== undefined ? json.data : json;
+}
+
+export async function getClientRequests() {
+  return request('/api/requests/client');
+}
+
+export async function getLawyerRequests(status) {
+  const params = status ? `?status=${status}` : '';
+  return request(`/api/requests/lawyer${params}`);
+}
+
+export async function getCaseRequest(id) {
+  return request(`/api/requests/${id}`);
+}
+
+export async function decideCaseRequest(id, decision, reason) {
+  return request(`/api/requests/${id}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  });
+}
+
+export async function updateCaseStatus(id, caseStatus) {
+  return request(`/api/requests/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ caseStatus }),
+  });
+}
+
+export async function completeCase(id) {
+  return request(`/api/requests/${id}/complete`, { method: 'POST' });
+}
+
+export async function getCaseChatSessions(id) {
+  return request(`/api/requests/${id}/chat-sessions`);
+}
+
+export async function getCaseNotes(id) {
+  return request(`/api/requests/${id}/notes`);
+}
+
+export async function createCaseNote(id, content) {
+  return request(`/api/requests/${id}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function updateCaseNote(id, noteId, content) {
+  return request(`/api/requests/${id}/notes/${noteId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function deleteCaseNote(id, noteId) {
+  return request(`/api/requests/${id}/notes/${noteId}`, { method: 'DELETE' });
+}
+
+// Lawyer dashboard
+export async function getLawyerDashboard() {
+  return request('/api/lawyer/dashboard');
+}
+
+export async function getLawyerCapacity() {
+  return request('/api/lawyer/capacity');
+}
+
+export async function updateLawyerCapacity(updates) {
+  return request('/api/lawyer/capacity', {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}

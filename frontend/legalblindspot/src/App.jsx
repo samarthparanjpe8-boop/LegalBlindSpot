@@ -9,6 +9,7 @@ import MagicLinkHandler from './pages/MagicLinkHandler';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import LawyerDashboard from './pages/LawyerDashboard';
+import LawyerClientCasePage from './pages/LawyerClientCasePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { useSession } from './hooks/useSession';
@@ -62,6 +63,14 @@ export default function App() {
               element={
                 <ProtectedRoute requiredRole="lawyer">
                   <LawyerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/lawyer/clients/:requestId"
+              element={
+                <ProtectedRoute requiredRole="lawyer">
+                  <LawyerClientCasePage />
                 </ProtectedRoute>
               }
             />

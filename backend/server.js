@@ -8,8 +8,16 @@ const CaseAssessment = require('./models/CaseAssessment');
 const CaseFile = require('./models/CaseFile');
 const CaseRequest = require('./models/CaseRequest');
 const User = require('./models/User');
+const LawyerNote = require('./models/LawyerNote');
 const geminiService = require('./services/geminiService');
 const { calculateTrustScore } = require('./services/trustScoreService');
+const {
+  getLawyerCapacity,
+  enrichAdvocateWithCapacity,
+  createAdvocateForLawyer,
+  buildCaseTimeline,
+  getLawyerDashboardStats,
+} = require('./services/lawyerService');
 const path = require('path');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -139,6 +147,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: '1mb' }));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -146,10 +155,18 @@ function authenticateToken(req, res, next) {
   if (!token) return res.sendStatus(401);
   jwt.verify(token, process.env.JWT_SECRET, (err, payload) => {
     if (err) return res.sendStatus(403);
-    // payload contains sub (user id) and email
-    req.user = { id: payload.sub, email: payload.email };
+    req.user = { id: payload.sub, email: payload.email, role: payload.role };
     next();
   });
+}
+
+function requireRole(role) {
+  return (req, res, next) => {
+    if (req.user?.role !== role) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  };
 }
 
 function createSession(city, budget) {
@@ -179,7 +196,7 @@ function getSessionOrThrow(sessionId) {
 
 // Client signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
-  const { name, email, password, role, city } = req.body;
+  const { name, email, password, role, city, gender, maxActiveClients } = req.body;
   if (!email || !password || !role) {
     return res.status(400).json({ error: 'Email, password, and role are required' });
   }
@@ -196,12 +213,19 @@ app.post('/api/auth/signup', async (req, res) => {
         return res.status(400).json({ message: 'User already exists and is verified. Please log in.' });
       }
       
-      // Update unverified user details and resend email
       existingUser.name = name;
       existingUser.passwordHash = passwordHash;
       existingUser.role = role;
       existingUser.city = city;
+      existingUser.gender = gender;
+      if (role === 'lawyer' && maxActiveClients) {
+        existingUser.maxActiveClients = Number(maxActiveClients);
+      }
       await existingUser.save();
+
+      if (role === 'lawyer') {
+        await createAdvocateForLawyer(existingUser);
+      }
 
       const token = jwt.sign({ sub: existingUser._id.toString(), email: existingUser.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
       await sendVerificationEmail(existingUser.email, token);
@@ -209,14 +233,24 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(200).json({ message: 'Verification email resent.' });
     }
 
-    const user = await User.create({
+    const userData = {
       name,
       email: emailLower,
       passwordHash,
       role,
       city,
+      gender,
       emailVerified: false,
-    });
+    };
+    if (role === 'lawyer') {
+      userData.maxActiveClients = maxActiveClients ? Number(maxActiveClients) : 15;
+    }
+
+    const user = await User.create(userData);
+
+    if (role === 'lawyer') {
+      await createAdvocateForLawyer(user);
+    }
 
     const token = jwt.sign({ sub: user._id.toString(), email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
     await sendVerificationEmail(user.email, token);
@@ -245,7 +279,7 @@ app.post('/api/auth/verify', async (req, res) => {
     }
 
     const sessionJwt = jwt.sign(
-      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city },
+      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city, gender: user.gender },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -296,12 +330,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Wait, the client decided to enforce magic link verification, but if they are already verified we can issue JWT
     const token = jwt.sign(
-      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city },
+      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city, gender: user.gender },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: user.name, city: user.city } });
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: user.name, city: user.city, gender: user.gender } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: err.message });
@@ -405,7 +439,7 @@ function normalizeViability(result) {
   };
 }
 
-async function findAdvocates({ city, caseType, maxBudget, limit = 20 }) {
+async function findAdvocates({ city, caseType, maxBudget, limit = 20, includeUnavailable = false }) {
   const filter = {};
 
   if (city) {
@@ -419,10 +453,15 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20 }) {
   }
 
   try {
-    const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit).lean();
-    return advocates
-      .map(normalizeAdvocate)
-      .sort((a, b) => b.trustScore - a.trustScore);
+    const advocates = await Advocate.find(filter).sort({ ratingAvg: -1 }).limit(limit * 2).lean();
+    const enriched = await Promise.all(
+      advocates.map((adv) => enrichAdvocateWithCapacity(adv, normalizeAdvocate))
+    );
+    const sorted = enriched.sort((a, b) => b.trustScore - a.trustScore);
+    const filtered = includeUnavailable
+      ? sorted
+      : sorted.filter((adv) => adv.canReceiveRequests !== false);
+    return filtered.slice(0, limit);
   } catch (err) {
     console.error('Failed to fetch advocates from DB, using seed memory fallback:', err.message);
     const seedAdvocates = require('./data/seedAdvocates');
@@ -440,6 +479,7 @@ async function findAdvocates({ city, caseType, maxBudget, limit = 20 }) {
     }
     return filtered
       .map(normalizeAdvocate)
+      .map((adv) => ({ ...adv, canReceiveRequests: false, acceptingClients: false, availableSlots: 0 }))
       .sort((a, b) => b.trustScore - a.trustScore)
       .slice(0, limit);
   }
@@ -794,18 +834,18 @@ app.get('/api/advocates/:id', async (req, res) => {
   try {
     const advocate = await Advocate.findById(req.params.id).lean();
     if (!advocate) {
-      // Try seed advocates fallback
       const seedAdvocates = require('./data/seedAdvocates');
       const matched = seedAdvocates.find((a, idx) => {
         const id = a._id?.toString() || String(idx + 1);
         return id === req.params.id;
       });
       if (matched) {
-        return sendData(res, normalizeAdvocate(matched));
+        return sendData(res, { ...normalizeAdvocate(matched), canReceiveRequests: false, acceptingClients: false });
       }
       return res.status(404).json({ error: 'Advocate not found' });
     }
-    sendData(res, normalizeAdvocate(advocate));
+    const enriched = await enrichAdvocateWithCapacity(advocate, normalizeAdvocate);
+    sendData(res, enriched);
   } catch (err) {
     const seedAdvocates = require('./data/seedAdvocates');
     const matched = seedAdvocates.find((a, idx) => {
@@ -813,7 +853,7 @@ app.get('/api/advocates/:id', async (req, res) => {
       return id === req.params.id;
     });
     if (matched) {
-      return sendData(res, normalizeAdvocate(matched));
+      return sendData(res, { ...normalizeAdvocate(matched), canReceiveRequests: false, acceptingClients: false });
     }
     res.status(500).json({ error: err.message });
   }
@@ -892,52 +932,353 @@ app.get('/api/case-file/:sessionId', async (req, res) => {
 });
 
 // ---------- Case Request Routes ----------
-// Client creates a new case request (optional file attachments)
-app.post('/api/requests', authenticateToken, upload.array('attachments'), async (req, res) => {
-  const clientId = req.user.id;
-  const { lawyer, caseType, city, description, budgetInr } = req.body;
-  if (!lawyer || !caseType || !city || !description) {
-    return res.status(400).json({ error: 'Missing required fields' });
+app.post('/api/requests', authenticateToken, requireRole('client'), upload.array('attachments'), async (req, res) => {
+  try {
+    const clientId = req.user.id;
+    const { lawyer, advocateId, caseType, city, description, budgetInr, sessionId } = req.body;
+    if ((!lawyer && !advocateId) || !caseType || !city || !description) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    let lawyerId = lawyer;
+    let linkedAdvocateId = advocateId || null;
+
+    if (advocateId && !lawyerId) {
+      const advocate = await Advocate.findById(advocateId).lean();
+      if (!advocate?.userId) {
+        return res.status(400).json({ error: 'This advocate is not available for consultation requests' });
+      }
+      lawyerId = advocate.userId.toString();
+      linkedAdvocateId = advocateId;
+    }
+
+    const capacity = await getLawyerCapacity(lawyerId);
+    if (!capacity.accepting) {
+      return res.status(400).json({ error: 'This lawyer is not accepting new clients' });
+    }
+
+    const client = await User.findById(clientId).lean();
+    let aiSummary = description;
+    if (sessionId) {
+      const caseFile = await CaseFile.findOne({ sessionId }).lean();
+      if (caseFile?.caseSummary) aiSummary = caseFile.caseSummary;
+    }
+
+    const attachments = (req.files || []).map((f) => ({
+      filename: f.originalname,
+      storedName: f.filename,
+      path: f.path,
+    }));
+
+    const request = await CaseRequest.create({
+      client: clientId,
+      lawyer: lawyerId,
+      advocateId: linkedAdvocateId,
+      sessionId: sessionId || null,
+      caseType,
+      city,
+      description,
+      aiSummary,
+      clientGender: client?.gender,
+      budgetInr: budgetInr ? Number(budgetInr) : undefined,
+      caseStatus: 'Pending',
+      timeline: [{
+        event: 'Request sent',
+        timestamp: new Date(),
+        description: 'Client submitted consultation request',
+      }],
+      attachments,
+    });
+
+    const populated = await CaseRequest.findById(request._id)
+      .populate('client', 'name gender city email')
+      .populate('lawyer', 'name city email gender')
+      .lean();
+    sendData(res, populated, 201);
+  } catch (err) {
+    console.error('Create request error:', err);
+    res.status(500).json({ error: err.message });
   }
-  const attachments = (req.files || []).map(f => ({ filename: f.originalname, path: f.path }));
-  const request = await CaseRequest.create({
-    client: clientId,
-    lawyer,
-    caseType,
-    city,
-    description,
-    budgetInr,
-    attachments,
+});
+
+app.get('/api/requests/client', authenticateToken, requireRole('client'), async (req, res) => {
+  const clientId = req.user.id;
+  const requests = await CaseRequest.find({ client: clientId })
+    .populate('lawyer', 'name gender city email maxActiveClients acceptingClients')
+    .sort({ createdAt: -1 })
+    .lean();
+  sendData(res, requests);
+});
+
+app.get('/api/requests/lawyer', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  const lawyerId = req.user.id;
+  const { status } = req.query;
+  const filter = { lawyer: lawyerId };
+  if (status === 'pending') filter.status = 'pending';
+  if (status === 'active') {
+    filter.status = 'accepted';
+    filter.caseStatus = { $nin: ['Resolved', 'Closed'] };
+  }
+  const requests = await CaseRequest.find(filter)
+    .populate('client', 'name gender city email createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+  sendData(res, requests);
+});
+
+app.get('/api/requests/:id', authenticateToken, async (req, res) => {
+  try {
+    const request = await CaseRequest.findById(req.params.id)
+      .populate('client', 'name gender city email createdAt')
+      .populate('lawyer', 'name gender city email maxActiveClients casesCompleted')
+      .lean();
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    const isClient = request.client?._id?.toString() === req.user.id;
+    const isLawyer = request.lawyer?._id?.toString() === req.user.id;
+    if (!isClient && !isLawyer) return res.status(403).json({ error: 'Forbidden' });
+
+    const timeline = await buildCaseTimeline(request, request.client);
+    let caseFiles = [];
+    if (request.client?._id) {
+      caseFiles = await CaseFile.find({ userId: request.client._id.toString() })
+        .sort({ createdAt: -1 })
+        .lean();
+    }
+
+    sendData(res, { ...request, timeline, caseFiles });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/requests/:id/decision', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const lawyerId = req.user.id;
+    const { decision, reason } = req.body;
+    if (!['accept', 'decline'].includes(decision)) {
+      return res.status(400).json({ error: 'Invalid decision' });
+    }
+
+    const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: lawyerId });
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: 'Request already processed' });
+    }
+
+    if (decision === 'accept') {
+      const capacity = await getLawyerCapacity(lawyerId);
+      if (!capacity.accepting) {
+        return res.status(400).json({ error: 'You have reached maximum client capacity' });
+      }
+      request.status = 'accepted';
+      request.caseStatus = 'Accepted';
+      request.acceptedAt = new Date();
+      request.startedDate = new Date();
+      request.timeline.push({
+        event: 'Lawyer accepted',
+        timestamp: new Date(),
+        description: 'Case accepted by lawyer',
+      });
+    } else {
+      request.status = 'declined';
+      request.caseStatus = 'Closed';
+      request.declineReason = reason || '';
+      request.timeline.push({
+        event: 'Request declined',
+        timestamp: new Date(),
+        description: reason || 'Request declined by lawyer',
+      });
+    }
+
+    await request.save();
+    const populated = await CaseRequest.findById(request._id)
+      .populate('client', 'name gender city email')
+      .lean();
+    sendData(res, populated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/requests/:id/status', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const { caseStatus } = req.body;
+    const validStatuses = ['Pending', 'Accepted', 'In Progress', 'Waiting for Documents', 'Filed', 'Resolved', 'Closed'];
+    if (!validStatuses.includes(caseStatus)) {
+      return res.status(400).json({ error: 'Invalid case status' });
+    }
+
+    const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: req.user.id, status: 'accepted' });
+    if (!request) return res.status(404).json({ error: 'Active case not found' });
+
+    request.caseStatus = caseStatus;
+    request.timeline.push({
+      event: 'Status updated',
+      timestamp: new Date(),
+      description: `Case status changed to ${caseStatus}`,
+    });
+
+    if (caseStatus === 'Resolved' || caseStatus === 'Closed') {
+      request.completedAt = new Date();
+    }
+
+    await request.save();
+    sendData(res, request);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/requests/:id/complete', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: req.user.id, status: 'accepted' });
+    if (!request) return res.status(404).json({ error: 'Active case not found' });
+
+    request.caseStatus = 'Resolved';
+    request.completedAt = new Date();
+    request.timeline.push({
+      event: 'Case completed',
+      timestamp: new Date(),
+      description: 'Lawyer marked case as complete',
+    });
+    await request.save();
+    await User.findByIdAndUpdate(req.user.id, { $inc: { casesCompleted: 1 } });
+
+    sendData(res, request);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/requests/:id/chat-sessions', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: req.user.id, status: 'accepted' });
+    if (!request) return res.status(404).json({ error: 'Case not found' });
+
+    const clientId = request.client.toString();
+    const sessions = await CaseFile.find({ userId: clientId })
+      .sort({ createdAt: -1 })
+      .select('sessionId caseType city budgetInr caseSummary chatHistory createdAt')
+      .lean();
+
+    sendData(res, sessions.map((s) => ({
+      sessionId: s.sessionId,
+      caseType: s.caseType,
+      city: s.city,
+      budget: s.budgetInr,
+      summary: s.caseSummary,
+      messageCount: s.chatHistory?.length || 0,
+      messages: s.chatHistory || [],
+      createdAt: s.createdAt,
+      isPrimary: s.sessionId === request.sessionId,
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/requests/:id/notes', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: req.user.id });
+  if (!request) return res.status(404).json({ error: 'Case not found' });
+  const notes = await LawyerNote.find({ caseRequest: req.params.id, lawyer: req.user.id })
+    .sort({ updatedAt: -1 })
+    .lean();
+  sendData(res, notes);
+});
+
+app.post('/api/requests/:id/notes', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  const { content } = req.body;
+  if (!content?.trim()) return res.status(400).json({ error: 'Note content is required' });
+  const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: req.user.id, status: 'accepted' });
+  if (!request) return res.status(404).json({ error: 'Case not found' });
+  const note = await LawyerNote.create({
+    lawyer: req.user.id,
+    caseRequest: req.params.id,
+    content: content.trim(),
   });
-  sendData(res, request, 201);
+  sendData(res, note, 201);
 });
 
-// Client lists their own case requests
-app.get('/api/requests/client', authenticateToken, async (req, res) => {
-  const clientId = req.user.id;
-  const requests = await CaseRequest.find({ client: clientId }).populate('lawyer', 'name picture').lean();
-  sendData(res, requests);
+app.patch('/api/requests/:id/notes/:noteId', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  const { content } = req.body;
+  if (!content?.trim()) return res.status(400).json({ error: 'Note content is required' });
+  const note = await LawyerNote.findOneAndUpdate(
+    { _id: req.params.noteId, caseRequest: req.params.id, lawyer: req.user.id },
+    { content: content.trim() },
+    { new: true }
+  );
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  sendData(res, note);
 });
 
-// Lawyer lists requests addressed to them
-app.get('/api/requests/lawyer', authenticateToken, async (req, res) => {
-  const lawyerId = req.user.id;
-  const requests = await CaseRequest.find({ lawyer: lawyerId }).populate('client', 'name picture').lean();
-  sendData(res, requests);
+app.delete('/api/requests/:id/notes/:noteId', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  const note = await LawyerNote.findOneAndDelete({
+    _id: req.params.noteId,
+    caseRequest: req.params.id,
+    lawyer: req.user.id,
+  });
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  sendData(res, { ok: true });
 });
 
-// Lawyer decides to accept or decline a request
-app.post('/api/requests/:id/decision', authenticateToken, async (req, res) => {
-  const lawyerId = req.user.id;
-  const { decision } = req.body; // expected 'accept' or 'decline'
-  if (!['accept', 'decline'].includes(decision)) {
-    return res.status(400).json({ error: 'Invalid decision' });
+// ---------- Lawyer Dashboard Routes ----------
+app.get('/api/lawyer/dashboard', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const stats = await getLawyerDashboardStats(req.user.id);
+    sendData(res, stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  const request = await CaseRequest.findOne({ _id: req.params.id, lawyer: lawyerId });
-  if (!request) return res.status(404).json({ error: 'Request not found' });
-  request.status = decision === 'accept' ? 'accepted' : 'declined';
-  await request.save();
-  sendData(res, request);
+});
+
+app.get('/api/lawyer/capacity', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const lawyer = await User.findById(req.user.id).select('maxActiveClients acceptingClients casesCompleted').lean();
+    const capacity = await getLawyerCapacity(req.user.id);
+    sendData(res, {
+      maxActiveClients: lawyer?.maxActiveClients ?? 15,
+      currentClients: capacity.current,
+      availableSlots: capacity.available,
+      acceptingClients: lawyer?.acceptingClients !== false,
+      casesCompleted: lawyer?.casesCompleted ?? 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/lawyer/capacity', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  try {
+    const { maxActiveClients, acceptingClients } = req.body;
+    const updates = {};
+    if (maxActiveClients !== undefined) {
+      const max = Number(maxActiveClients);
+      if (max < 1 || max > 100) return res.status(400).json({ error: 'Maximum clients must be between 1 and 100' });
+      updates.maxActiveClients = max;
+    }
+    if (acceptingClients !== undefined) updates.acceptingClients = Boolean(acceptingClients);
+
+    const lawyer = await User.findByIdAndUpdate(req.user.id, updates, { new: true })
+      .select('maxActiveClients acceptingClients casesCompleted')
+      .lean();
+    const capacity = await getLawyerCapacity(req.user.id);
+    sendData(res, {
+      maxActiveClients: lawyer.maxActiveClients,
+      currentClients: capacity.current,
+      availableSlots: capacity.available,
+      acceptingClients: lawyer.acceptingClients,
+      casesCompleted: lawyer.casesCompleted,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/lawyer/profile', authenticateToken, requireRole('lawyer'), async (req, res) => {
+  const lawyer = await User.findById(req.user.id).select('-passwordHash').lean();
+  const advocate = await Advocate.findOne({ userId: req.user.id }).lean();
+  sendData(res, { ...lawyer, advocate: advocate ? normalizeAdvocate(advocate) : null });
 });
 
 app.use((err, _req, res, _next) => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import TrustBadge from '../shared/TrustBadge';
 import ScoreBar from '../shared/ScoreBar';
 import AdvocateTrustBreakdown from './AdvocateTrustBreakdown';
+import ConsultRequestModal from './ConsultRequestModal';
 import { formatCurrency, formatPercent } from '../../utils/formatters';
 import { 
   MapPin, 
@@ -11,16 +12,31 @@ import {
   Languages, 
   ShieldCheck, 
   ChevronDown, 
-  ChevronUp 
+  ChevronUp,
+  Send,
+  UserX,
 } from 'lucide-react';
 
-export default function AdvocateCard({ advocate, userBudget, compact = false, animationDelay = 0 }) {
+export default function AdvocateCard({
+  advocate,
+  userBudget,
+  compact = false,
+  animationDelay = 0,
+  showConsult = false,
+  sessionId,
+  caseType,
+  city,
+  caseSummary,
+  onRequestSent,
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const adv = advocate;
   const trust = adv.trustResult || adv.trustBreakdown || {};
   const score = adv.trustScore ?? trust.totalScore ?? 0;
   const withinBudget = userBudget ? (adv.consultationFee || 0) <= userBudget : true;
+  const canConsult = adv.canReceiveRequests !== false && adv.lawyerUserId;
 
   if (compact) {
     return (
@@ -138,6 +154,39 @@ export default function AdvocateCard({ advocate, userBudget, compact = false, an
         <AdvocateTrustBreakdown
           breakdown={trust.breakdown || trust}
           totalScore={score}
+        />
+      )}
+
+      {showConsult && !compact && (
+        <div className="advocate-consult-wrap">
+          {!canConsult ? (
+            <div className="advocate-unavailable">
+              <UserX size={16} />
+              Not Accepting New Clients
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="advocate-consult-btn"
+              onClick={() => setShowModal(true)}
+            >
+              <Send size={16} />
+              Send Request
+            </button>
+          )}
+        </div>
+      )}
+
+      {showModal && (
+        <ConsultRequestModal
+          advocate={adv}
+          sessionId={sessionId}
+          caseType={caseType}
+          city={city}
+          budget={userBudget}
+          caseSummary={caseSummary}
+          onClose={() => setShowModal(false)}
+          onSuccess={onRequestSent}
         />
       )}
     </div>

@@ -15,7 +15,7 @@ export const AuthProvider = ({ children }) => {
       // decode token payload (simple base64 decode, no verification)
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, token });
+        setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, gender: payload.gender, token });
       } catch (e) {
         console.error('Invalid token', e);
         localStorage.removeItem('token');
@@ -39,15 +39,15 @@ export const AuthProvider = ({ children }) => {
     const { token } = data;
     localStorage.setItem('token', token);
     const payload = JSON.parse(atob(token.split('.')[1]));
-    setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, token });
+    setUser({ id: payload.sub, email: payload.email, role: payload.role, name: payload.name, city: payload.city, gender: payload.gender, token });
     return data;
   };
 
-  const signup = async (email, password, role, name, city) => {
+  const signup = async (email, password, role, name, city, gender, maxActiveClients) => {
     const res = await fetch(`${BASE_URL}/api/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, role, name, city }),
+      body: JSON.stringify({ email, password, role, name, city, gender, maxActiveClients }),
     });
     const data = await res.json();
     if (!res.ok) {

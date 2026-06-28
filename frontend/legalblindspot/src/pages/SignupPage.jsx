@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 const CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata', 'Nagpur'];
+const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
 const SignupPage = () => {
   const [name, setName] = useState('');
@@ -11,6 +12,8 @@ const SignupPage = () => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('client');
   const [city, setCity] = useState('');
+  const [gender, setGender] = useState('');
+  const [maxActiveClients, setMaxActiveClients] = useState('15');
   const [showPassword, setShowPassword] = useState(false);
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -22,7 +25,7 @@ const SignupPage = () => {
     setLoading(true);
     setError('');
     try {
-      await signup(email, password, role, name, city);
+      await signup(email, password, role, name, city, gender, role === 'lawyer' ? maxActiveClients : undefined);
       navigate('/login', { state: { message: 'Signup successful! Please check your email for a magic link to verify your account.' } });
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Signup failed');
@@ -189,6 +192,31 @@ const SignupPage = () => {
           </div>
 
           <div>
+            <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gender</label>
+            <select
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                fontSize: '1rem',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="" disabled>Select gender</option>
+              {GENDERS.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>City</label>
             <select
               value={city}
@@ -212,6 +240,30 @@ const SignupPage = () => {
               ))}
             </select>
           </div>
+
+          {role === 'lawyer' && (
+            <div>
+              <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '8px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maximum Active Clients</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={maxActiveClients}
+                onChange={(e) => setMaxActiveClients(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '1rem',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          )}
 
           <button
             type="submit"

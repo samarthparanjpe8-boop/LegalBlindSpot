@@ -25,8 +25,24 @@ const UserSchema = new mongoose.Schema({
     required: true,
     default: 'client',
   },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other', 'Prefer not to say'],
+  },
   city: {
     type: String,
+  },
+  maxActiveClients: {
+    type: Number,
+    default: 15,
+  },
+  casesCompleted: {
+    type: Number,
+    default: 0,
+  },
+  acceptingClients: {
+    type: Boolean,
+    default: true,
   },
   createdAt: {
     type: Date,
