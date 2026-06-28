@@ -139,16 +139,20 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: (origin, callback) => {
+      // Allow requests from frontend and any localhost for development
       if (
         !origin ||
         allowedOrigins.includes(origin) ||
-        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
+        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin) ||
+        /^https:\/\/legal-blind-spot\.vercel\.app$/.test(origin)
       ) {
         callback(null, true);
         return;
       }
+      console.log('Socket.io CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     },
+    credentials: true,
   },
 });
 

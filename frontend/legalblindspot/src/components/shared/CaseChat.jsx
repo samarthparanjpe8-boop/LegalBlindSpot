@@ -3,7 +3,7 @@ import { Send, Paperclip } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useTheme } from '../../context/ThemeContext';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_API_URL?.replace(/^https/, 'wss')?.replace(/^http/, 'ws') || 'ws://localhost:5000';
 
 export default function CaseChat({ requestId, token, currentUserId, currentRole }) {
   const { theme } = useTheme();
@@ -196,7 +196,7 @@ export default function CaseChat({ requestId, token, currentUserId, currentRole 
           justify-content: space-between;
           align-items: center;
           padding: 16px 20px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
           color: white;
         }
 
@@ -267,7 +267,7 @@ export default function CaseChat({ requestId, token, currentUserId, currentRole 
         }
 
         .my-message .message-content {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
           color: white;
         }
 
@@ -356,7 +356,7 @@ export default function CaseChat({ requestId, token, currentUserId, currentRole 
           width: 40px;
           height: 40px;
           border: none;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
           border-radius: 50%;
           cursor: pointer;
           color: white;
