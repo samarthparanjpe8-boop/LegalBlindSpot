@@ -31,9 +31,12 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
+    const documentType = req.body.documentType || 'document';
+    // Sanitize document type for filename (remove special characters, spaces)
+    const sanitizedDocType = documentType.replace(/[^a-zA-Z0-9]/g, '_');
     const unique = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    cb(null, `${unique}${ext}`);
+    cb(null, `${sanitizedDocType}_${unique}${ext}`);
   },
 });
 const upload = multer({ storage });
@@ -998,6 +1001,41 @@ app.patch('/api/chat/history/:sessionId/name', authenticateToken, async (req, re
   }
 });
 
+// Delete a chat session
+app.delete('/api/chat/history/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    console.log('DELETE request received for sessionId:', req.params.sessionId);
+    console.log('User ID:', req.user.id);
+    
+    // First check if the session exists for this user
+    const existingCase = await CaseFile.findOne({
+      sessionId: req.params.sessionId,
+      userId: req.user.id,
+    });
+    
+    console.log('Existing case found:', existingCase);
+    
+    if (!existingCase) {
+      console.log('Session not found for this user');
+      return res.status(404).json({ error: 'Session not found or does not belong to you' });
+    }
+    
+    // Delete the session
+    const caseFile = await CaseFile.findOneAndDelete({
+      sessionId: req.params.sessionId,
+      userId: req.user.id,
+    });
+    
+    console.log('Delete result:', caseFile);
+    
+    if (!caseFile) return res.status(404).json({ error: 'Session not found' });
+    sendData(res, { sessionId: caseFile.sessionId, deleted: true });
+  } catch (err) {
+    console.error('Delete error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/assess', async (req, res) => {
   const { description = '', caseType = '', documents = [] } = req.body;
   if (!caseType && !description) {
@@ -1516,6 +1554,53 @@ app.get('/api/lawyer/profile', authenticateToken, requireRole('lawyer'), async (
   const lawyer = await User.findById(req.user.id).select('-passwordHash').lean();
   const advocate = await Advocate.findOne({ userId: req.user.id }).lean();
   sendData(res, { ...lawyer, advocate: advocate ? normalizeAdvocate(advocate) : null });
+});
+
+// File upload endpoint with validation for PDF, PNG, JPG, and ZIP files
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['.pdf', '.png', '.jpg', '.jpeg', '.zip'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedTypes.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, PNG, JPG, and ZIP files are allowed.'), false);
+  }
+};
+
+const uploadWithValidation = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+});
+
+app.post('/api/upload', uploadWithValidation.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { sessionId } = req.body;
+    if (sessionId) {
+      // Update CaseFile with the uploaded document path
+      await CaseFile.findOneAndUpdate(
+        { sessionId },
+        { $push: { documentsUploaded: req.file.filename } },
+        { new: true }
+      );
+    }
+
+    sendData(res, {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      url: `/uploads/${req.file.filename}`,
+    }, 201);
+  } catch (err) {
+    console.error('File upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.use((err, _req, res, _next) => {

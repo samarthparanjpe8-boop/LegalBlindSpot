@@ -32,6 +32,13 @@ export function saveSessionHistory(userId, sessionId, data) {
   localStorage.setItem(storageKey(userId), JSON.stringify(all));
 }
 
+export function deleteSessionHistory(userId, sessionId) {
+  if (!userId || !sessionId) return;
+  const all = getAllSessionHistories(userId);
+  delete all[sessionId];
+  localStorage.setItem(storageKey(userId), JSON.stringify(all));
+}
+
 export function listSessionHistories(userId) {
   const all = getAllSessionHistories(userId);
   return Object.values(all).sort(

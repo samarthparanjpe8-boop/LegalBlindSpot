@@ -2,8 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import * as api from '../services/api';
 import { getSessionHistory, saveSessionHistory, historyToMessages, computeIntakeComplete } from '../utils/chatHistory';
 
-const DEFAULT_MESSAGE_LIMIT = 6;
-const DEFAULT_SLOWDOWN_MS = 3000;
+const DEFAULT_MESSAGE_LIMIT = 3;
+const DEFAULT_SLOWDOWN_MS = 30000;
 
 function syncLimitFromMessages(msgs, setLimitReached, setMessagesRemaining) {
   const userCount = msgs.filter((m) => m.role === 'user').length;

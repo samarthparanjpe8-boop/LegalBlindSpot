@@ -13,13 +13,29 @@ async function request(endpoint, options = {}) {
   };
 
   const res = await fetch(url, config);
-  const json = await res.json();
+
+  // Read the response body once
+  const text = await res.text();
 
   if (!res.ok) {
-    throw new Error(json.error || json.message || 'Request failed');
+    let errorText = 'Something went wrong';
+    try {
+      const errorData = JSON.parse(text);
+      errorText = errorData.error || errorText;
+    } catch (e) {
+      errorText = text || 'Something went wrong';
+    }
+    throw new Error(errorText);
   }
 
-  return json.data !== undefined ? json.data : json;
+  // Parse the response as JSON
+  try {
+    const json = JSON.parse(text);
+    return json.data !== undefined ? json.data : json;
+  } catch (e) {
+    // If not valid JSON, return the text as a message
+    return text ? { message: text } : {};
+  }
 }
 
 export async function createSession(city, budget) {
@@ -191,4 +207,13 @@ export async function renameChatSession(sessionId, chatName) {
     method: 'PATCH',
     body: JSON.stringify({ chatName }),
   });
+}
+
+export async function deleteChatSession(sessionId) {
+  console.log('deleteChatSession called with sessionId:', sessionId);
+  const result = await request(`/api/chat/history/${sessionId}`, {
+    method: 'DELETE',
+  });
+  console.log('deleteChatSession result:', result);
+  return result;
 }

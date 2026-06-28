@@ -38,14 +38,43 @@ const JSON_SYSTEM_INSTRUCTION =
 
 const MODEL_FALLBACKS = [
   process.env.GEMINI_MODEL,
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
 ].filter(Boolean);
 
 let genAI;
 let chatModel;
 let jsonModel;
 let modelIndex = 0;
+
+// Queue system to prevent concurrent AI calls
+let aiQueue = [];
+let isProcessingQueue = false;
+
+async function addToQueue(operation) {
+  return new Promise((resolve, reject) => {
+    aiQueue.push({ operation, resolve, reject });
+    processQueue();
+  });
+}
+
+async function processQueue() {
+  if (isProcessingQueue || aiQueue.length === 0) return;
+  
+  isProcessingQueue = true;
+  const { operation, resolve, reject } = aiQueue.shift();
+  
+  try {
+    const result = await operation();
+    resolve(result);
+  } catch (err) {
+    reject(err);
+  } finally {
+    isProcessingQueue = false;
+    // Longer delay between AI calls to prevent rate limiting
+    setTimeout(() => processQueue(), 3000);
+  }
+}
 
 function isRetryableModelError(err) {
   const msg = err && err.message ? err.message : String(err);
@@ -212,72 +241,76 @@ function parseJsonResponse(text) {
 }
 
 async function generateJson(prompt) {
-  const maxParseRetries = 2;
+  return addToQueue(async () => {
+    const maxParseRetries = 2;
 
-  for (let parseAttempt = 0; parseAttempt <= maxParseRetries; parseAttempt++) {
-    try {
-      return await withModelRetry(async (m) => {
-        const result = await m.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.2,
-          },
-        });
-        return parseJsonResponse(result.response.text());
-      }, true);
-    } catch (err) {
-      const canRetryParse =
-        parseAttempt < maxParseRetries &&
-        (isJsonParseError(err) || isRetryableModelError(err));
+    for (let parseAttempt = 0; parseAttempt <= maxParseRetries; parseAttempt++) {
+      try {
+        return await withModelRetry(async (m) => {
+          const result = await m.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.2,
+            },
+          });
+          return parseJsonResponse(result.response.text());
+        }, true);
+      } catch (err) {
+        const canRetryParse =
+          parseAttempt < maxParseRetries &&
+          (isJsonParseError(err) || isRetryableModelError(err));
 
-      if (canRetryParse) {
-        if (isRetryableModelError(err)) {
-          switchToNextModel();
+        if (canRetryParse) {
+          if (isRetryableModelError(err)) {
+            switchToNextModel();
+          }
+          continue;
         }
-        continue;
+        throw err;
       }
-      throw err;
     }
-  }
 
-  throw new SyntaxError('Failed to parse JSON after retries');
+    throw new SyntaxError('Failed to parse JSON after retries');
+  });
 }
 
 async function chat(userMessage, history, contextString, onToken) {
-  return withModelRetry(async (m) => {
-    const contents = [];
+  return addToQueue(async () => {
+    return withModelRetry(async (m) => {
+      const contents = [];
 
-    history.forEach((entry) => {
-      contents.push({
-        role: entry.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: entry.content }],
+      history.forEach((entry) => {
+        contents.push({
+          role: entry.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: entry.content }],
+        });
       });
-    });
 
-    const messageWithContext = contextString
-      ? `${contextString}\n\nUser message: ${userMessage}`
-      : userMessage;
+      const messageWithContext = contextString
+        ? `${contextString}\n\nUser message: ${userMessage}`
+        : userMessage;
 
-    contents.push({ role: 'user', parts: [{ text: messageWithContext }] });
+      contents.push({ role: 'user', parts: [{ text: messageWithContext }] });
 
-    const result = await m.generateContentStream({ contents });
-    let fullResponse = '';
+      const result = await m.generateContentStream({ contents });
+      let fullResponse = '';
 
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        fullResponse += text;
-        if (onToken) onToken(text);
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          fullResponse += text;
+          if (onToken) onToken(text);
+        }
       }
-    }
 
-    return [
-      ...history,
-      { role: 'user', content: userMessage },
-      { role: 'assistant', content: fullResponse },
-    ];
-  }, false);
+      return [
+        ...history,
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: fullResponse },
+      ];
+    }, false);
+  });
 }
 
 const CASE_TYPE_KEYWORDS = {
@@ -424,34 +457,36 @@ function assessViabilityLocally(description, caseType) {
 }
 
 async function chatReply(userMessage, history, contextString) {
-  return withModelRetry(async (m) => {
-    const contents = [];
+  return addToQueue(async () => {
+    return withModelRetry(async (m) => {
+      const contents = [];
 
-    history.forEach((entry) => {
-      contents.push({
-        role: entry.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: entry.content }],
+      history.forEach((entry) => {
+        contents.push({
+          role: entry.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: entry.content }],
+        });
       });
-    });
 
-    const messageWithContext = contextString
-      ? `${contextString}\n\nUser message: ${userMessage}`
-      : userMessage;
+      const messageWithContext = contextString
+        ? `${contextString}\n\nUser message: ${userMessage}`
+        : userMessage;
 
-    contents.push({ role: 'user', parts: [{ text: messageWithContext }] });
+      contents.push({ role: 'user', parts: [{ text: messageWithContext }] });
 
-    const result = await m.generateContent({ contents });
-    const content = result.response.text();
+      const result = await m.generateContent({ contents });
+      const content = result.response.text();
 
-    return {
-      content,
-      history: [
-        ...history,
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content },
-      ],
-    };
-  }, false);
+      return {
+        content,
+        history: [
+          ...history,
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content },
+        ],
+      };
+    }, false);
+  });
 }
 
 const CASE_TYPE_KEYWORDS_VIABILITY = {

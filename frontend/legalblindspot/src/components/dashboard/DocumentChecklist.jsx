@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Check, FileText, CheckCircle, Upload } from 'lucide-react';
+import DocumentUpload from '../shared/DocumentUpload';
 
 export default function DocumentChecklist({ caseType, sessionId }) {
   const [readyDocs, setReadyDocs] = useState({});
@@ -139,14 +140,18 @@ export default function DocumentChecklist({ caseType, sessionId }) {
         ))}
       </div>
 
-      <div className="checklist-info-box" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px' }}>
-        <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Upload size={16} style={{ color: 'var(--accent)' }} /> Drop your documents into the case folder at:
-        </p>
-        <code className="checklist-code" style={{ display: 'block', background: 'var(--bg-primary)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.9rem', color: 'var(--text-primary)', border: '1px solid var(--border)', overflowX: 'auto', marginBottom: '12px' }}>
-          /legallink-cases/{sessionId || 'session'}/uploaded/
-        </code>
-        <div className="checklist-note" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>The chatbot terminal detects uploads automatically.</div>
+      <div className="checklist-upload-section" style={{ marginTop: '20px' }}>
+        <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: '0.95rem', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '12px' }}>Upload Documents</h3>
+        <DocumentUpload 
+          sessionId={sessionId}
+          documentTypes={docs}
+          onUploadComplete={(data) => {
+            console.log('File uploaded:', data);
+          }}
+          onError={(error) => {
+            console.error('Upload error:', error);
+          }}
+        />
       </div>
     </div>
   );

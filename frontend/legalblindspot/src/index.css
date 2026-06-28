@@ -1,8 +1,4 @@
-/* ═══════════════════════════════════════════════════════════
-   LegalLink – Unified Stylesheet
-   Design Language: Harvey AI-inspired editorial / enterprise SaaS
-   Typography: Lora (serif headings) + Inter (sans body)
-   ═══════════════════════════════════════════════════════════ */
+
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
 
@@ -73,16 +69,16 @@
 
 /* Light mode tokens */
 [data-theme="light"] {
-  --bg-primary: #F7F6F3;
-  --bg-secondary: #EFEEEA;
+  --bg-primary: #FAFAF8;
+  --bg-secondary: #F5F5F2;
   --bg-card: #FFFFFF;
-  --bg-hover: #E8E6E1;
-  --border: #D8D5CE;
-  --border-light: #C8C4BC;
+  --bg-hover: #EFEFE9;
+  --border: #E0E0D8;
+  --border-light: #D0D0C8;
 
-  --text-primary: #111110;
-  --text-secondary: #5C5A56;
-  --text-muted: #8A8780;
+  --text-primary: #0A0A0A;
+  --text-secondary: #4A4844;
+  --text-muted: #7A7872;
 
   --accent-dim: rgba(201, 55, 44, 0.08);
 }
