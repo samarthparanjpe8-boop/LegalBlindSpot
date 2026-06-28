@@ -286,7 +286,7 @@ app.post('/api/auth/signup', async (req, res) => {
       existingUser.passwordHash = passwordHash;
       existingUser.role = role;
       existingUser.city = encrypt(city);
-      existingUser.gender = encrypt(gender);
+      existingUser.gender = gender;
       if (role === 'lawyer' && maxActiveClients) {
         existingUser.maxActiveClients = Number(maxActiveClients);
       }
@@ -308,7 +308,7 @@ app.post('/api/auth/signup', async (req, res) => {
       passwordHash,
       role,
       city: encrypt(city),
-      gender: encrypt(gender),
+      gender: gender,
       emailVerified: false,
     };
     if (role === 'lawyer') {
