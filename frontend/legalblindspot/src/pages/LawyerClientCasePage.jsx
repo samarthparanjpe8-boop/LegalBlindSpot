@@ -18,13 +18,16 @@ import {
   Trash2,
   Edit2,
   Check,
+  MessageCircle,
 } from 'lucide-react';
 import LawyerLayout, { StatusBadge, formatRequestDate } from '../components/lawyer/LawyerLayout';
 import Spinner from '../components/shared/Spinner';
 import EmptyState from '../components/shared/EmptyState';
 import ChatMessage from '../components/chat/ChatMessage';
+import CaseChat from '../components/shared/CaseChat';
 import { formatCurrency } from '../utils/formatters';
 import * as api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const CASE_STATUSES = [
   'Pending', 'Accepted', 'In Progress', 'Waiting for Documents', 'Filed', 'Resolved', 'Closed',
@@ -35,6 +38,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export default function LawyerClientCasePage() {
   const { requestId } = useParams();
   const navigate = useNavigate();
+  const { user, token } = useAuth();
   const [caseData, setCaseData] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -161,6 +165,35 @@ export default function LawyerClientCasePage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'realtime-chat':
+        return (
+          <div className="tab-section realtime-chat-section">
+            <h2 className="tab-section-title"><MessageCircle size={22} className="tab-title-icon" /> Real-Time Chat</h2>
+            {caseData?.caseStatus === 'Rejected' ? (
+              <EmptyState 
+                icon={<MessageCircle size={40} />} 
+                heading="Chat not available" 
+                message="This case has been rejected. Chat is not available." 
+              />
+            ) : caseData?.caseStatus === 'Closed' ? (
+              <EmptyState 
+                icon={<MessageCircle size={40} />} 
+                heading="Chat not available" 
+                message="This case has been closed. Chat is not available." 
+              />
+            ) : (
+              <div className="realtime-chat-container">
+                <CaseChat 
+                  requestId={requestId} 
+                  token={token} 
+                  currentUserId={user?.id} 
+                  currentRole="lawyer" 
+                />
               </div>
             )}
           </div>
@@ -293,6 +326,7 @@ export default function LawyerClientCasePage() {
   const subNav = [
     { id: 'overview', label: 'Overview', icon: <User size={16} /> },
     { id: 'chat', label: 'Chat History', icon: <MessageSquare size={16} /> },
+    { id: 'realtime-chat', label: 'Real-Time Chat', icon: <MessageCircle size={16} /> },
     { id: 'documents', label: 'Documents', icon: <FileText size={16} /> },
     { id: 'notes', label: 'Notes', icon: <StickyNote size={16} /> },
   ];

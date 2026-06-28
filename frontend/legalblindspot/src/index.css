@@ -3343,16 +3343,11 @@ p {
 }
 
 .dashboard-sidebar-rail {
-  width: 56px;
+  width: 240px;
   flex-shrink: 0;
   z-index: 1100;
   align-self: stretch;
   overflow: hidden;
-  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.dashboard-sidebar-rail:hover {
-  width: 240px;
 }
 
 .dashboard-sidebar-rail .dashboard-sidebar {
@@ -3360,11 +3355,6 @@ p {
   width: 240px;
   height: 100%;
   transform: none;
-  box-shadow: none;
-  transition: box-shadow 0.28s ease;
-}
-
-.dashboard-sidebar-rail:hover .dashboard-sidebar {
   box-shadow: 10px 0 32px rgba(0, 0, 0, 0.28);
 }
 
@@ -3425,7 +3415,7 @@ p {
 
 .nav-item-label {
   grid-column: 2;
-  opacity: 0;
+  opacity: 1;
   overflow: hidden;
   padding-right: 16px;
   transition: opacity 0.2s ease 0.06s;
@@ -5167,7 +5157,7 @@ p {
 .lawyer-stat-label { font-size: 0.8rem; color: var(--dash-text-secondary, var(--text-secondary)); text-transform: uppercase; letter-spacing: 0.05em; }
 .lawyer-stat-sub { font-size: 0.75rem; color: var(--dash-text-muted, var(--text-muted)); display: block; margin-top: 2px; }
 
-.lawyer-status-badge { display: inline-block; padding: 4px 10px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 500; text-transform: capitalize; }
+.lawyer-status-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 500; text-transform: capitalize; }
 .lawyer-status-success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
 .lawyer-status-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
 .lawyer-status-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
@@ -5295,6 +5285,88 @@ p {
 .lawyer-note-item p { line-height: 1.6; margin-bottom: var(--space-2); }
 .lawyer-note-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--dash-text-muted, var(--text-muted)); }
 .lawyer-note-actions { display: flex; gap: var(--space-2); }
+
+.lawyer-chats-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.lawyer-chat-card { cursor: pointer; transition: var(--transition); }
+.lawyer-chat-card:hover { transform: translateY(-2px); border-color: var(--accent) !important; }
+.lawyer-chat-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); }
+.lawyer-chat-info { display: flex; gap: var(--space-3); align-items: center; }
+.lawyer-chat-card-actions { display: flex; align-items: center; gap: 8px; }
+.lawyer-chat-delete-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: #ef4444;
+  transition: var(--transition);
+}
+.lawyer-chat-delete-btn:hover { background: rgba(239, 68, 68, 0.2); transform: scale(1.05); }
+.lawyer-chat-icon { 
+  display: flex; align-items: center; justify-content: center; 
+  width: 40px; height: 40px; 
+  background: var(--accent-dim); 
+  border-radius: var(--radius-full); 
+  color: var(--accent);
+}
+.lawyer-chat-info div { display: flex; flex-direction: column; gap: 2px; }
+.lawyer-chat-info strong { font-size: 0.95rem; font-weight: 600; }
+.lawyer-chat-info span { font-size: 0.8rem; color: var(--dash-text-muted, var(--text-muted)); }
+.lawyer-chat-card-meta { display: flex; gap: var(--space-4); font-size: 0.8rem; color: var(--dash-text-muted, var(--text-muted)); }
+.lawyer-chat-card-meta span { display: flex; align-items: center; gap: 4px; }
+.lawyer-chat-btn { 
+  display: inline-flex; align-items: center; gap: 6px; 
+  padding: 8px 16px; margin-top: var(--space-3);
+  background: var(--accent); color: white; border: none; 
+  border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; transition: var(--transition);
+}
+.lawyer-chat-btn:hover { background: var(--accent-hover); }
+
+.realtime-chat-section { height: calc(100vh - 200px); }
+.realtime-chat-container { height: 100%; }
+
+.applications-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.application-card { padding: var(--space-5); }
+.application-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-4); }
+.application-lawyer-info { display: flex; gap: var(--space-3); align-items: center; }
+.application-lawyer-icon { 
+  display: flex; align-items: center; justify-content: center; 
+  width: 40px; height: 40px; 
+  background: var(--accent-dim); 
+  border-radius: var(--radius-full); 
+  color: var(--accent);
+}
+.application-lawyer-info div { display: flex; flex-direction: column; gap: 2px; }
+.application-lawyer-info strong { font-size: 0.95rem; font-weight: 600; }
+.application-lawyer-info span { font-size: 0.8rem; color: var(--dash-text-muted, var(--text-muted)); }
+.application-card-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.application-detail-item { display: flex; flex-direction: column; gap: 4px; }
+.detail-label { font-size: 0.75rem; color: var(--dash-text-muted, var(--text-muted)); text-transform: uppercase; letter-spacing: 0.04em; }
+.detail-value { font-size: 0.9rem; font-weight: 500; }
+.application-chat-btn { 
+  display: inline-flex; align-items: center; gap: 6px; 
+  padding: 8px 16px;
+  background: var(--accent); color: white; border: none; 
+  border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; transition: var(--transition);
+}
+.application-chat-btn:hover { background: var(--accent-hover); }
+.application-pending-note { 
+  padding: var(--space-3) var(--space-4); 
+  background: rgba(245, 158, 11, 0.1); 
+  border: 1px solid rgba(245, 158, 11, 0.3); 
+  border-radius: var(--radius-sm);
+  color: var(--warning); font-size: 0.85rem; text-align: center;
+}
+.application-rejected-note { 
+  padding: var(--space-3) var(--space-4); 
+  background: rgba(239, 68, 68, 0.1); 
+  border: 1px solid rgba(239, 68, 68, 0.3); 
+  border-radius: var(--radius-sm);
+  color: var(--danger); font-size: 0.85rem; text-align: center;
+}
 
 @media (max-width: 768px) {
   .lawyer-stats-grid { grid-template-columns: 1fr 1fr; }

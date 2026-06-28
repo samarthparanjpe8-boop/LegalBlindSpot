@@ -1,4 +1,4 @@
-const MAX_USER_MESSAGES = Number(process.env.CHAT_USER_MESSAGE_LIMIT) || 6;
+const MAX_USER_MESSAGES = Number(process.env.CHAT_USER_MESSAGE_LIMIT) || Infinity;
 const CHAT_SLOWDOWN_MS = Number(process.env.CHAT_SLOWDOWN_MS) || 3000;
 
 const CASE_LEGAL_PROFILES = {

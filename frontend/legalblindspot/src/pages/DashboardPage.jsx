@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import SessionPanel from '../components/dashboard/SessionPanel';
 import ChatWindow from '../components/chat/ChatWindow';
 import AdvocateCard from '../components/advocates/AdvocateCard';
@@ -11,6 +12,9 @@ import EmptyState from '../components/shared/EmptyState';
 import ThemeToggle from '../components/shared/ThemeToggle';
 import { useChat } from '../hooks/useChat';
 import { useAdvocates } from '../hooks/useAdvocates';
+import { formatCurrency } from '../utils/formatters';
+import LawyerLayout, { StatusBadge } from '../components/lawyer/LawyerLayout';
+import * as api from '../services/api';
 import {
   MessageSquare,
   Users,
@@ -22,6 +26,10 @@ import {
   User,
   Sparkles,
   History,
+  MessageCircle,
+  MapPin,
+  IndianRupee,
+  Trash2,
 } from 'lucide-react';
 
 const BUDGETS = [500, 1000, 2000, 3000, 5000];
@@ -37,12 +45,17 @@ export default function DashboardPage({
   switchSession,
 }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('chat');
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [isPromptingBudget, setIsPromptingBudget] = useState(false);
   const [budgetVal, setBudgetVal] = useState('');
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [activeCases, setActiveCases] = useState([]);
+  const [loadingCases, setLoadingCases] = useState(false);
+  const [allRequests, setAllRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   const {
     messages,
@@ -71,6 +84,40 @@ export default function DashboardPage({
       setActiveTab('chat');
     }
   }, [session.sessionId, activeTab]);
+
+  useEffect(() => {
+    const loadActiveCases = async () => {
+      if (user?.id) {
+        setLoadingCases(true);
+        try {
+          const cases = await api.getClientActiveCases();
+          setActiveCases(cases || []);
+        } catch (err) {
+          console.error('Failed to load active cases:', err);
+        } finally {
+          setLoadingCases(false);
+        }
+      }
+    };
+    loadActiveCases();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const loadAllRequests = async () => {
+      if (user?.id) {
+        setLoadingRequests(true);
+        try {
+          const requests = await api.getClientRequests();
+          setAllRequests(requests || []);
+        } catch (err) {
+          console.error('Failed to load requests:', err);
+        } finally {
+          setLoadingRequests(false);
+        }
+      }
+    };
+    loadAllRequests();
+  }, [user?.id]);
 
   useEffect(() => {
     if (detectedCase && detectedCase !== session.caseType) {
@@ -152,6 +199,20 @@ export default function DashboardPage({
     }
   };
 
+  const handleDeleteCase = async (caseId, e) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this case? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.deleteCaseRequest(caseId);
+      setActiveCases(activeCases.filter(c => c._id !== caseId));
+      addToast('Case deleted successfully', 'success');
+    } catch (err) {
+      addToast(err.message || 'Failed to delete case', 'error');
+    }
+  };
+
   const sortedAdvocates = [...advocates].sort((a, b) => {
     const scoreA = a.trustScore ?? 0;
     const scoreB = b.trustScore ?? 0;
@@ -220,6 +281,141 @@ export default function DashboardPage({
       );
     }
 
+    if (activeTab === 'my-applications') {
+      return (
+        <div className="tab-section">
+          <h2 className="tab-section-title">
+            <MessageCircle size={22} className="tab-title-icon" />
+            My Applications
+          </h2>
+          {loadingRequests ? (
+            <div className="tab-loading"><Spinner size={32} /></div>
+          ) : allRequests.length === 0 ? (
+            <EmptyState
+              icon={<MessageCircle size={40} />}
+              heading="No applications yet"
+              message="When you send consultation requests to lawyers, they will appear here."
+            />
+          ) : (
+            <div className="applications-list">
+              {allRequests.map((request) => (
+                <div
+                  key={request._id}
+                  className="application-card glass-card"
+                >
+                  <div className="application-card-header">
+                    <div className="application-lawyer-info">
+                      <div className="application-lawyer-icon">
+                        <User size={20} />
+                      </div>
+                      <div>
+                        <strong>{request.lawyer?.name || 'Lawyer'}</strong>
+                        <span>{request.lawyer?.practiceAreas?.join(', ') || 'General Practice'}</span>
+                      </div>
+                    </div>
+                    <StatusBadge status={request.status} />
+                  </div>
+                  <div className="application-card-details">
+                    <div className="application-detail-item">
+                      <span className="detail-label">Case Type:</span>
+                      <span className="detail-value">{request.caseType || 'Legal Consultation'}</span>
+                    </div>
+                    <div className="application-detail-item">
+                      <span className="detail-label">Budget:</span>
+                      <span className="detail-value">₹{formatCurrency(request.budgetInr)}</span>
+                    </div>
+                    <div className="application-detail-item">
+                      <span className="detail-label">Applied:</span>
+                      <span className="detail-value">{new Date(request.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  {request.status === 'Accepted' && (
+                    <button
+                      className="application-chat-btn"
+                      onClick={() => navigate(`/client/chat/${request._id}`)}
+                    >
+                      <MessageCircle size={16} />
+                      Open Chat
+                    </button>
+                  )}
+                  {request.status === 'Pending' && (
+                    <div className="application-pending-note">
+                      Waiting for lawyer response
+                    </div>
+                  )}
+                  {request.status === 'Rejected' && (
+                    <div className="application-rejected-note">
+                      {request.rejectionReason || 'Request was rejected by the lawyer'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (activeTab === 'lawyer-chats') {
+      return (
+        <div className="tab-section">
+          <h2 className="tab-section-title">
+            <MessageCircle size={22} className="tab-title-icon" />
+            Active Lawyer Chats
+          </h2>
+          {loadingCases ? (
+            <div className="tab-loading"><Spinner size={32} /></div>
+          ) : activeCases.length === 0 ? (
+            <EmptyState
+              icon={<MessageCircle size={40} />}
+              heading="No active cases"
+              message="When lawyers accept your consultation requests, you can chat with them here."
+            />
+          ) : (
+            <div className="lawyer-chats-list">
+              {activeCases.map((caseItem) => (
+                <div
+                  key={caseItem._id}
+                  className="lawyer-chat-card glass-card"
+                  onClick={() => navigate(`/client/chat/${caseItem._id}`)}
+                >
+                  <div className="lawyer-chat-card-header">
+                    <div className="lawyer-chat-info">
+                      <div className="lawyer-chat-icon">
+                        <User size={20} />
+                      </div>
+                      <div>
+                        <strong>{caseItem.lawyer?.name || 'Lawyer'}</strong>
+                        <span>{caseItem.caseType || 'Legal Consultation'}</span>
+                      </div>
+                    </div>
+                    <div className="lawyer-chat-card-actions">
+                      <StatusBadge status={caseItem.status} />
+                      <button
+                        className="lawyer-chat-delete-btn"
+                        onClick={(e) => handleDeleteCase(caseItem._id, e)}
+                        title="Delete case"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="lawyer-chat-card-meta">
+                    <span><MapPin size={14} /> {caseItem.city}</span>
+                    <span><IndianRupee size={14} /> {formatCurrency(caseItem.budgetInr)}</span>
+                  </div>
+                  <button className="lawyer-chat-btn">
+                    <MessageCircle size={16} />
+                    Open Chat
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (activeTab === 'advocates') {
       return renderAdvocatesSection();
     }
@@ -284,6 +480,8 @@ export default function DashboardPage({
   const menuItems = [
     { id: 'chat', label: 'Chat', icon: <MessageSquare size={18} /> },
     { id: 'history', label: 'Chat History', icon: <History size={18} /> },
+    { id: 'my-applications', label: 'My Applications', icon: <MessageCircle size={18} /> },
+    { id: 'lawyer-chats', label: 'Lawyer Chats', icon: <MessageCircle size={18} /> },
     { id: 'advocates', label: 'Advocates', icon: <Users size={18} /> },
     { id: 'advice', label: 'Advice Check', icon: <Sparkles size={18} /> },
     ...(session.sessionId

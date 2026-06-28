@@ -217,3 +217,11 @@ export async function deleteChatSession(sessionId) {
   console.log('deleteChatSession result:', result);
   return result;
 }
+
+export async function getClientActiveCases() {
+  return request('/api/requests/client?status=accepted');
+}
+
+export async function deleteCaseRequest(id) {
+  return request(`/api/requests/${id}`, { method: 'DELETE' });
+}

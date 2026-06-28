@@ -10,6 +10,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import LawyerDashboard from './pages/LawyerDashboard';
 import LawyerClientCasePage from './pages/LawyerClientCasePage';
+import ClientLawyerChatPage from './pages/ClientLawyerChatPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -73,6 +74,14 @@ export default function App() {
               element={
                 <ProtectedRoute requiredRole="lawyer">
                   <LawyerClientCasePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/chat/:requestId"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLawyerChatPage />
                 </ProtectedRoute>
               }
             />

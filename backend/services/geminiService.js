@@ -38,8 +38,7 @@ const JSON_SYSTEM_INSTRUCTION =
 
 const MODEL_FALLBACKS = [
   process.env.GEMINI_MODEL,
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
+  'gemini-3.1-flash-lite',
 ].filter(Boolean);
 
 let genAI;

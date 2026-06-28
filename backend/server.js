@@ -1,12 +1,15 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
 const { connectDB } = require('./db/connection');
 const Advocate = require('./models/Advocate');
 const CaseAssessment = require('./models/CaseAssessment');
 const CaseFile = require('./models/CaseFile');
 const CaseRequest = require('./models/CaseRequest');
+const CaseMessage = require('./models/CaseMessage');
 const User = require('./models/User');
 const LawyerNote = require('./models/LawyerNote');
 const geminiService = require('./services/geminiService');
@@ -19,6 +22,7 @@ const {
   buildCaseTimeline,
   getLawyerDashboardStats,
 } = require('./services/lawyerService');
+const { encrypt, decrypt, encryptObject, decryptObject } = require('./utils/encryption');
 const path = require('path');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
@@ -130,6 +134,27 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const sessions = new Map();
 
+// Create HTTP server and Socket.io instance
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: (origin, callback) => {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
+      ) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+  },
+});
+
+// Store connected users: userId -> socketId
+const connectedUsers = new Map();
+
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -217,10 +242,18 @@ async function hydrateSessionFromDb(session, clientHistory) {
   try {
     const caseFile = await CaseFile.findOne({ sessionId: session.sessionId }).lean();
     if (caseFile) {
-      dbHistory = caseFile.chatHistory || [];
-      if (caseFile.city) session.city = caseFile.city;
+      // Decrypt chat history
+      dbHistory = caseFile.chatHistory ? decrypt(caseFile.chatHistory) : [];
+      if (typeof dbHistory === 'string') {
+        try {
+          dbHistory = JSON.parse(dbHistory);
+        } catch {
+          dbHistory = [];
+        }
+      }
+      if (caseFile.city) session.city = decrypt(caseFile.city);
       if (caseFile.budgetInr != null) session.budget = caseFile.budgetInr;
-      if (caseFile.caseType) session.caseType = caseFile.caseType;
+      if (caseFile.caseType) session.caseType = decrypt(caseFile.caseType);
     }
   } catch (err) {
     console.error('Failed to hydrate session from CaseFile:', err.message);
@@ -249,11 +282,11 @@ app.post('/api/auth/signup', async (req, res) => {
         return res.status(400).json({ message: 'User already exists and is verified. Please log in.' });
       }
       
-      existingUser.name = name;
+      existingUser.name = encrypt(name);
       existingUser.passwordHash = passwordHash;
       existingUser.role = role;
-      existingUser.city = city;
-      existingUser.gender = gender;
+      existingUser.city = encrypt(city);
+      existingUser.gender = encrypt(gender);
       if (role === 'lawyer' && maxActiveClients) {
         existingUser.maxActiveClients = Number(maxActiveClients);
       }
@@ -270,12 +303,12 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const userData = {
-      name,
+      name: encrypt(name),
       email: emailLower,
       passwordHash,
       role,
-      city,
-      gender,
+      city: encrypt(city),
+      gender: encrypt(gender),
       emailVerified: false,
     };
     if (role === 'lawyer') {
@@ -364,14 +397,19 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
+    // Decrypt user data
+    const decryptedName = decrypt(user.name);
+    const decryptedCity = decrypt(user.city);
+    const decryptedGender = decrypt(user.gender);
+
     // Wait, the client decided to enforce magic link verification, but if they are already verified we can issue JWT
     const token = jwt.sign(
-      { sub: user._id.toString(), email: user.email, role: user.role, name: user.name, city: user.city, gender: user.gender },
+      { sub: user._id.toString(), email: user.email, role: user.role, name: decryptedName, city: decryptedCity, gender: decryptedGender },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: user.name, city: user.city, gender: user.gender } });
+    res.json({ token, user: { id: user._id, email: user.email, role: user.role, name: decryptedName, city: decryptedCity, gender: decryptedGender } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: err.message });
@@ -683,10 +721,10 @@ async function upsertCaseFile(session, description, userId) {
   const existing = await CaseFile.findOne({ sessionId: session.sessionId });
   if (existing) {
     if (session.caseType) existing.caseType = session.caseType;
-    existing.city = session.city;
+    existing.city = encrypt(session.city);
     existing.budgetInr = session.budget;
-    existing.caseSummary = description || existing.caseSummary;
-    existing.chatHistory = session.history;
+    existing.caseSummary = encrypt(description || existing.caseSummary);
+    existing.chatHistory = encrypt(JSON.stringify(session.history));
     if (userId) existing.userId = userId;
     // Update chatName if we have more info now
     if (!existing.chatName && session.caseType && session.city) {
@@ -714,8 +752,8 @@ async function upsertCaseFile(session, description, userId) {
     sessionId: session.sessionId,
     userId: userId || null,
     chatName,
-    caseType: session.caseType || null,
-    city: session.city,
+    caseType: encrypt(session.caseType || null),
+    city: encrypt(session.city),
     budgetInr: session.budget,
     documentsRequired: checklist.map((item) => ({
       document: item.document,
@@ -723,9 +761,9 @@ async function upsertCaseFile(session, description, userId) {
       uploaded: false,
     })),
     documentsUploaded: [],
-    caseSummary: description || '',
+    caseSummary: encrypt(description || ''),
     adviceChecks: [],
-    chatHistory: session.history,
+    chatHistory: encrypt(JSON.stringify(session.history)),
   });
 }
 
@@ -809,10 +847,17 @@ app.post('/api/chat', async (req, res) => {
     try {
       const caseFile = await CaseFile.findOne({ sessionId }).lean();
       if (caseFile) {
-        city = caseFile.city || city;
+        city = decrypt(caseFile.city) || city;
         budget = caseFile.budgetInr || budget;
-        caseType = caseFile.caseType || caseType;
-        history = caseFile.chatHistory || [];
+        caseType = decrypt(caseFile.caseType) || caseType;
+        history = caseFile.chatHistory ? decrypt(caseFile.chatHistory) : [];
+        if (typeof history === 'string') {
+          try {
+            history = JSON.parse(history);
+          } catch {
+            history = [];
+          }
+        }
       }
     } catch (dbErr) {
       console.error('Failed to query CaseFile during session restoration:', dbErr.message);
@@ -945,12 +990,23 @@ app.get('/api/chat/history/:sessionId', async (req, res) => {
     if (!caseFile) {
       return sendData(res, { sessionId: req.params.sessionId, messages: [], caseType: null, city: null, budget: null });
     }
+    // Decrypt sensitive fields
+    const messages = caseFile.chatHistory ? decrypt(caseFile.chatHistory) : [];
+    let parsedMessages = messages;
+    if (typeof messages === 'string') {
+      try {
+        parsedMessages = JSON.parse(messages);
+      } catch {
+        parsedMessages = [];
+      }
+    }
+
     sendData(res, {
       sessionId: caseFile.sessionId,
       userId: caseFile.userId,
-      messages: caseFile.chatHistory || [],
-      caseType: caseFile.caseType,
-      city: caseFile.city,
+      messages: parsedMessages,
+      caseType: decrypt(caseFile.caseType),
+      city: decrypt(caseFile.city),
       budget: caseFile.budgetInr,
       updatedAt: caseFile.createdAt,
     });
@@ -967,16 +1023,29 @@ app.get('/api/chat/history', authenticateToken, async (req, res) => {
       .select('sessionId chatName caseType city budgetInr caseSummary chatHistory createdAt')
       .lean();
 
-    const sessions = caseFiles.map((cf) => ({
-      sessionId: cf.sessionId,
-      chatName: cf.chatName || (cf.caseType && cf.city ? `${cf.caseType} · ${cf.city}` : cf.sessionId),
-      caseType: cf.caseType,
-      city: cf.city,
-      budget: cf.budgetInr,
-      preview: cf.caseSummary || (cf.chatHistory?.[0]?.content || '').slice(0, 120),
-      messageCount: (cf.chatHistory || []).length,
-      updatedAt: cf.createdAt,
-    }));
+    const sessions = caseFiles.map((cf) => {
+      // Decrypt sensitive fields
+      const chatHistory = cf.chatHistory ? decrypt(cf.chatHistory) : [];
+      let parsedHistory = chatHistory;
+      if (typeof chatHistory === 'string') {
+        try {
+          parsedHistory = JSON.parse(chatHistory);
+        } catch {
+          parsedHistory = [];
+        }
+      }
+      
+      return {
+        sessionId: cf.sessionId,
+        chatName: cf.chatName || (cf.caseType && cf.city ? `${decrypt(cf.caseType)} · ${decrypt(cf.city)}` : cf.sessionId),
+        caseType: decrypt(cf.caseType),
+        city: decrypt(cf.city),
+        budget: cf.budgetInr,
+        preview: decrypt(cf.caseSummary) || (parsedHistory?.[0]?.content || '').slice(0, 120),
+        messageCount: parsedHistory.length,
+        updatedAt: cf.createdAt,
+      };
+    });
 
     sendData(res, sessions);
   } catch (err) {
@@ -1211,11 +1280,24 @@ app.post('/api/requests', authenticateToken, requireRole('client'), upload.array
       return res.status(400).json({ error: 'This lawyer is not accepting new clients' });
     }
 
+    // Check if client already has an active/pending request with this lawyer
+    const existingRequest = await CaseRequest.findOne({
+      client: clientId,
+      lawyer: lawyerId,
+      status: { $in: ['pending', 'accepted'] },
+    });
+    if (existingRequest) {
+      return res.status(400).json({ 
+        error: 'You already have an active consultation request with this lawyer. Please continue the conversation in the existing request.',
+        existingRequestId: existingRequest._id,
+      });
+    }
+
     const client = await User.findById(clientId).lean();
     let aiSummary = description;
     if (sessionId) {
       const caseFile = await CaseFile.findOne({ sessionId }).lean();
-      if (caseFile?.caseSummary) aiSummary = caseFile.caseSummary;
+      if (caseFile?.caseSummary) aiSummary = decrypt(caseFile.caseSummary);
     }
 
     const attachments = (req.files || []).map((f) => ({
@@ -1229,10 +1311,10 @@ app.post('/api/requests', authenticateToken, requireRole('client'), upload.array
       lawyer: lawyerId,
       advocateId: linkedAdvocateId,
       sessionId: sessionId || null,
-      caseType,
-      city,
-      description,
-      aiSummary,
+      caseType: encrypt(caseType),
+      city: encrypt(city),
+      description: encrypt(description),
+      aiSummary: encrypt(aiSummary),
       clientGender: client?.gender,
       budgetInr: budgetInr ? Number(budgetInr) : undefined,
       caseStatus: 'Pending',
@@ -1261,7 +1343,17 @@ app.get('/api/requests/client', authenticateToken, requireRole('client'), async 
     .populate('lawyer', 'name gender city email maxActiveClients acceptingClients')
     .sort({ createdAt: -1 })
     .lean();
-  sendData(res, requests);
+  
+  // Decrypt sensitive fields
+  const decryptedRequests = requests.map(req => ({
+    ...req,
+    caseType: decrypt(req.caseType),
+    city: decrypt(req.city),
+    description: decrypt(req.description),
+    aiSummary: decrypt(req.aiSummary),
+  }));
+  
+  sendData(res, decryptedRequests);
 });
 
 app.get('/api/requests/lawyer', authenticateToken, requireRole('lawyer'), async (req, res) => {
@@ -1278,18 +1370,39 @@ app.get('/api/requests/lawyer', authenticateToken, requireRole('lawyer'), async 
     .sort({ createdAt: -1 })
     .lean();
 
+  // Decrypt sensitive fields
+  const decryptedRequests = requests.map(req => ({
+    ...req,
+    caseType: decrypt(req.caseType),
+    city: decrypt(req.city),
+    description: decrypt(req.description),
+    aiSummary: decrypt(req.aiSummary),
+  }));
+
   // For pending requests, embed the linked chat history so lawyers can read before deciding
   if (status === 'pending') {
-    const enriched = await Promise.all(requests.map(async (req) => {
+    const enriched = await Promise.all(decryptedRequests.map(async (req) => {
       if (!req.sessionId) return { ...req, chatHistory: [], chatName: null };
       try {
         const caseFile = await CaseFile.findOne({ sessionId: req.sessionId })
           .select('chatHistory chatName caseType city')
           .lean();
+        
+        // Decrypt chat history
+        const chatHistory = caseFile?.chatHistory ? decrypt(caseFile.chatHistory) : [];
+        let parsedHistory = chatHistory;
+        if (typeof chatHistory === 'string') {
+          try {
+            parsedHistory = JSON.parse(chatHistory);
+          } catch {
+            parsedHistory = [];
+          }
+        }
+        
         return {
           ...req,
-          chatHistory: caseFile?.chatHistory || [],
-          chatName: caseFile?.chatName || (caseFile?.caseType && caseFile?.city ? `${caseFile.caseType} · ${caseFile.city}` : null),
+          chatHistory: parsedHistory,
+          chatName: caseFile?.chatName || (caseFile?.caseType && caseFile?.city ? `${decrypt(caseFile.caseType)} · ${decrypt(caseFile.city)}` : null),
         };
       } catch {
         return { ...req, chatHistory: [], chatName: null };
@@ -1298,7 +1411,7 @@ app.get('/api/requests/lawyer', authenticateToken, requireRole('lawyer'), async 
     return sendData(res, enriched);
   }
 
-  sendData(res, requests);
+  sendData(res, decryptedRequests);
 });
 
 app.get('/api/requests/:id', authenticateToken, async (req, res) => {
@@ -1313,7 +1426,16 @@ app.get('/api/requests/:id', authenticateToken, async (req, res) => {
     const isLawyer = request.lawyer?._id?.toString() === req.user.id;
     if (!isClient && !isLawyer) return res.status(403).json({ error: 'Forbidden' });
 
-    const timeline = await buildCaseTimeline(request, request.client);
+    // Decrypt sensitive fields
+    const decryptedRequest = {
+      ...request,
+      caseType: decrypt(request.caseType),
+      city: decrypt(request.city),
+      description: decrypt(request.description),
+      aiSummary: decrypt(request.aiSummary),
+    };
+
+    const timeline = await buildCaseTimeline(decryptedRequest, request.client);
     let caseFiles = [];
     if (request.client?._id) {
       caseFiles = await CaseFile.find({ userId: request.client._id.toString() })
@@ -1321,7 +1443,7 @@ app.get('/api/requests/:id', authenticateToken, async (req, res) => {
         .lean();
     }
 
-    sendData(res, { ...request, timeline, caseFiles });
+    sendData(res, { ...decryptedRequest, timeline, caseFiles });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1370,7 +1492,17 @@ app.post('/api/requests/:id/decision', authenticateToken, requireRole('lawyer'),
     const populated = await CaseRequest.findById(request._id)
       .populate('client', 'name gender city email')
       .lean();
-    sendData(res, populated);
+    
+    // Decrypt sensitive fields
+    const decryptedPopulated = {
+      ...populated,
+      caseType: decrypt(populated.caseType),
+      city: decrypt(populated.city),
+      description: decrypt(populated.description),
+      aiSummary: decrypt(populated.aiSummary),
+    };
+    
+    sendData(res, decryptedPopulated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1437,17 +1569,30 @@ app.get('/api/requests/:id/chat-sessions', authenticateToken, requireRole('lawye
       .select('sessionId caseType city budgetInr caseSummary chatHistory createdAt')
       .lean();
 
-    sendData(res, sessions.map((s) => ({
-      sessionId: s.sessionId,
-      caseType: s.caseType,
-      city: s.city,
-      budget: s.budgetInr,
-      summary: s.caseSummary,
-      messageCount: s.chatHistory?.length || 0,
-      messages: s.chatHistory || [],
-      createdAt: s.createdAt,
-      isPrimary: s.sessionId === request.sessionId,
-    })));
+    sendData(res, sessions.map((s) => {
+      // Decrypt sensitive fields
+      const chatHistory = s.chatHistory ? decrypt(s.chatHistory) : [];
+      let parsedHistory = chatHistory;
+      if (typeof chatHistory === 'string') {
+        try {
+          parsedHistory = JSON.parse(chatHistory);
+        } catch {
+          parsedHistory = [];
+        }
+      }
+      
+      return {
+        sessionId: s.sessionId,
+        caseType: decrypt(s.caseType),
+        city: decrypt(s.city),
+        budget: s.budgetInr,
+        summary: decrypt(s.caseSummary),
+        messageCount: parsedHistory.length,
+        messages: parsedHistory,
+        createdAt: s.createdAt,
+        isPrimary: s.sessionId === request.sessionId,
+      };
+    }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1475,6 +1620,106 @@ app.post('/api/requests/:id/notes', authenticateToken, requireRole('lawyer'), as
   sendData(res, note, 201);
 });
 
+// Get messages for a case request
+app.get('/api/requests/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const request = await CaseRequest.findById(req.params.id)
+      .populate('client', '_id')
+      .populate('lawyer', '_id');
+    
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    const isClient = request.client._id.toString() === req.user.id;
+    const isLawyer = request.lawyer._id.toString() === req.user.id;
+    if (!isClient && !isLawyer) return res.status(403).json({ error: 'Forbidden' });
+
+    const messages = await CaseMessage.find({ caseRequest: req.params.id })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Decrypt message content
+    const decryptedMessages = messages.map(msg => ({
+      ...msg,
+      content: decrypt(msg.content),
+    }));
+
+    sendData(res, decryptedMessages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send a message (REST API fallback)
+app.post('/api/requests/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const request = await CaseRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (request.status !== 'accepted') return res.status(400).json({ error: 'Case not active' });
+
+    const isClient = request.client.toString() === req.user.id;
+    const isLawyer = request.lawyer.toString() === req.user.id;
+    if (!isClient && !isLawyer) return res.status(403).json({ error: 'Forbidden' });
+
+    const { content, attachments = [] } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: 'Message content is required' });
+
+    const senderRole = isClient ? 'client' : 'lawyer';
+
+    const message = await CaseMessage.create({
+      caseRequest: req.params.id,
+      sender: req.user.id,
+      senderRole,
+      content: encrypt(content),
+      attachments,
+    });
+
+    // Emit via Socket.io if users are connected
+    const decryptedMessage = {
+      _id: message._id,
+      sender: message.sender,
+      senderRole: message.senderRole,
+      content: content,
+      attachments: message.attachments,
+      read: message.read,
+      createdAt: message.createdAt,
+    };
+
+    io.to(`case_${req.params.id}`).emit('new_message', decryptedMessage);
+
+    sendData(res, decryptedMessage);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark messages as read
+app.post('/api/requests/:id/messages/read', authenticateToken, async (req, res) => {
+  try {
+    const request = await CaseRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    const isClient = request.client.toString() === req.user.id;
+    const isLawyer = request.lawyer.toString() === req.user.id;
+    if (!isClient && !isLawyer) return res.status(403).json({ error: 'Forbidden' });
+
+    await CaseMessage.updateMany(
+      {
+        caseRequest: req.params.id,
+        sender: { $ne: req.user.id },
+        read: false,
+      },
+      {
+        read: true,
+        readAt: new Date(),
+      }
+    );
+
+    sendData(res, { success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/requests/:id/notes/:noteId', authenticateToken, requireRole('lawyer'), async (req, res) => {
   const { content } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Note content is required' });
@@ -1495,6 +1740,34 @@ app.delete('/api/requests/:id/notes/:noteId', authenticateToken, requireRole('la
   });
   if (!note) return res.status(404).json({ error: 'Note not found' });
   sendData(res, { ok: true });
+});
+
+// Delete a case request (client can delete their own requests)
+app.delete('/api/requests/:id', authenticateToken, async (req, res) => {
+  try {
+    const request = await CaseRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    const isClient = request.client.toString() === req.user.id;
+    const isLawyer = request.lawyer.toString() === req.user.id;
+    
+    if (!isClient && !isLawyer) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Delete associated messages
+    await CaseMessage.deleteMany({ caseRequest: req.params.id });
+    
+    // Delete associated notes
+    await LawyerNote.deleteMany({ caseRequest: req.params.id });
+
+    // Delete the request
+    await CaseRequest.findByIdAndDelete(req.params.id);
+
+    sendData(res, { message: 'Case request deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- Lawyer Dashboard Routes ----------
@@ -1625,7 +1898,186 @@ async function start() {
     fs.writeFileSync('db_test_result.txt', 'DB CONNECTION ERROR: ' + err.message + '\nStack: ' + err.stack + '\nAT ' + new Date().toISOString());
     console.error('Database connection failed (running in offline/no-db mode):', err.message);
   }
-  app.listen(PORT, () => {
+
+  // Socket.io connection handler
+  io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
+    // Authenticate socket connection
+    socket.on('authenticate', async (token) => {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.userId = decoded.sub;
+        socket.userRole = decoded.role;
+        connectedUsers.set(decoded.sub, socket.id);
+        console.log(`User ${decoded.sub} authenticated with socket ${socket.id}`);
+        socket.emit('authenticated', { userId: decoded.sub, role: decoded.role });
+      } catch (err) {
+        socket.emit('auth_error', { error: 'Invalid token' });
+        socket.disconnect();
+      }
+    });
+
+    // Join a case request room
+    socket.on('join_case', async (caseRequestId) => {
+      try {
+        const request = await CaseRequest.findById(caseRequestId)
+          .populate('client', '_id')
+          .populate('lawyer', '_id');
+        
+        if (!request) {
+          socket.emit('error', { message: 'Case request not found' });
+          return;
+        }
+
+        // Verify user is part of this case
+        const clientId = request.client._id.toString();
+        const lawyerId = request.lawyer._id.toString();
+        
+        if (socket.userId !== clientId && socket.userId !== lawyerId) {
+          socket.emit('error', { message: 'Not authorized to join this case' });
+          return;
+        }
+
+        socket.join(`case_${caseRequestId}`);
+        socket.currentCase = caseRequestId;
+        console.log(`User ${socket.userId} joined case ${caseRequestId}`);
+        
+        // Load and send all previous messages
+        const messages = await CaseMessage.find({ caseRequest: caseRequestId })
+          .sort({ createdAt: 1 })
+          .lean();
+
+        // Decrypt message content
+        const decryptedMessages = messages.map(msg => ({
+          _id: msg._id,
+          sender: msg.sender,
+          senderRole: msg.senderRole,
+          content: decrypt(msg.content),
+          attachments: msg.attachments,
+          read: msg.read,
+          readAt: msg.readAt,
+          createdAt: msg.createdAt,
+        }));
+
+        socket.emit('message_history', decryptedMessages);
+        
+        // Emit unread count
+        const unreadCount = await CaseMessage.countDocuments({
+          caseRequest: caseRequestId,
+          sender: { $ne: socket.userId },
+          read: false,
+        });
+        socket.emit('unread_count', { count: unreadCount });
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
+    // Send message
+    socket.on('send_message', async (data) => {
+      try {
+        if (!socket.userId || !socket.currentCase) {
+          socket.emit('error', { message: 'Not authenticated or not in a case' });
+          return;
+        }
+
+        const { content, attachments = [] } = data;
+        if (!content?.trim()) {
+          socket.emit('error', { message: 'Message content is required' });
+          return;
+        }
+
+        const request = await CaseRequest.findById(socket.currentCase);
+        if (!request) {
+          socket.emit('error', { message: 'Case request not found' });
+          return;
+        }
+
+        // Allow lawyers to message even when case is pending
+        // Clients can only message when case is accepted
+        if (socket.userRole === 'client' && request.status !== 'accepted') {
+          socket.emit('error', { message: 'Case must be accepted before you can send messages' });
+          return;
+        }
+
+        // Lawyers can message in pending, accepted, or in-progress status
+        if (socket.userRole === 'lawyer' && 
+            !['pending', 'accepted', 'in progress', 'In Progress'].includes(request.status)) {
+          socket.emit('error', { message: 'Case is not active' });
+          return;
+        }
+
+        // Create message
+        const message = await CaseMessage.create({
+          caseRequest: socket.currentCase,
+          sender: socket.userId,
+          senderRole: socket.userRole,
+          content: encrypt(content),
+          attachments,
+        });
+
+        // Broadcast to case room
+        const decryptedMessage = {
+          _id: message._id,
+          sender: message.sender,
+          senderRole: message.senderRole,
+          content: content,
+          attachments: message.attachments,
+          read: message.read,
+          createdAt: message.createdAt,
+        };
+
+        io.to(`case_${socket.currentCase}`).emit('new_message', decryptedMessage);
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
+    // Mark messages as read
+    socket.on('mark_read', async (caseRequestId) => {
+      try {
+        if (!socket.userId) return;
+
+        await CaseMessage.updateMany(
+          {
+            caseRequest: caseRequestId,
+            sender: { $ne: socket.userId },
+            read: false,
+          },
+          {
+            read: true,
+            readAt: new Date(),
+          }
+        );
+
+        // Notify sender that messages were read
+        const request = await CaseRequest.findById(caseRequestId);
+        if (request) {
+          const otherUserId = socket.userId === request.client.toString() 
+            ? request.lawyer.toString() 
+            : request.client.toString();
+          
+          const otherSocketId = connectedUsers.get(otherUserId);
+          if (otherSocketId) {
+            io.to(otherSocketId).emit('messages_read', { caseRequestId });
+          }
+        }
+      } catch (err) {
+        console.error('Error marking messages as read:', err);
+      }
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+      if (socket.userId) {
+        connectedUsers.delete(socket.userId);
+        console.log(`User ${socket.userId} disconnected`);
+      }
+    });
+  });
+
+  httpServer.listen(PORT, () => {
     console.log(`LegalLink API running on http://localhost:${PORT}`);
   });
 }
